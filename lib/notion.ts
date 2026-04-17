@@ -28,7 +28,9 @@ async function createPage(dbId: string, properties: Record<string, unknown>): Pr
     method: 'POST', headers: HEADERS(),
     body: JSON.stringify({ parent: { database_id: dbId }, properties }),
   });
-  const d = await res.json() as { id: string };
+  const text = await res.text();
+  const d = JSON.parse(text) as { id?: string; message?: string };
+  if (!d.id) throw new Error(`Notion createPage failed: ${d.message ?? text.slice(0, 200)}`);
   return d.id;
 }
 
