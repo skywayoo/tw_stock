@@ -8,7 +8,11 @@ export const dynamic = 'force-dynamic';
 async function fetchGoogleNewsRss(stockId: string, stockName: string): Promise<{ title: string; url: string }[]> {
   const query = encodeURIComponent(`${stockName} ${stockId}`);
   const url = `https://news.google.com/rss/search?q=${query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
-  const res = await fetch(url, { cache: 'no-store' });
+  const res = await fetch(url, {
+    cache: 'no-store',
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)' },
+  });
+  if (!res.ok) return [];
   const text = await res.text();
   const items: { title: string; url: string }[] = [];
   const matches = text.matchAll(/<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<\/item>/g);
@@ -95,5 +99,5 @@ ${headlines}
     await sendTelegram(`🚨 <b>重要新聞通知</b>\n\n${importantNews.join('\n\n')}`);
   }
 
-  return NextResponse.json({ processed, important: importantNews.length });
+  return NextResponse.json({ processed, important: importantNews.length, total: holdings.length });
 }
