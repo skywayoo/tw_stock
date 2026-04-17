@@ -6,14 +6,16 @@ import { sendTelegram } from '@/lib/telegram';
 export const dynamic = 'force-dynamic';
 
 async function fetchGoogleNewsRss(stockId: string, stockName: string): Promise<{ title: string; url: string }[]> {
-  const query = encodeURIComponent(`${stockName} ${stockId} 股票`);
+  const query = encodeURIComponent(`${stockName} ${stockId}`);
   const url = `https://news.google.com/rss/search?q=${query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
   const res = await fetch(url, { cache: 'no-store' });
   const text = await res.text();
   const items: { title: string; url: string }[] = [];
-  const matches = text.matchAll(/<item>[\s\S]*?<title><!\[CDATA\[(.*?)\]\]><\/title>[\s\S]*?<link>(.*?)<\/link>[\s\S]*?<\/item>/g);
+  const matches = text.matchAll(/<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<\/item>/g);
   for (const m of matches) {
-    items.push({ title: m[1].trim(), url: m[2].trim() });
+    const title = m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim();
+    const link = m[2].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim();
+    if (title && link) items.push({ title, url: link });
     if (items.length >= 5) break;
   }
   return items;
