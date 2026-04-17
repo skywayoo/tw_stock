@@ -1,0 +1,55 @@
+name: Scheduled Tasks
+
+on:
+  schedule:
+    - cron: '*/30 1-5 * * 1-5'   # 每30分 09:00-13:30 台灣時間 (UTC+8 = UTC-8h, weekdays)
+    - cron: '0 */1 1-6 * * 1-5'  # 每小時 公開資訊
+    - cron: '30 6 * * 1-5'       # 14:30 台灣時間 每日報告
+    - cron: '0 13 * * 1-5'       # 21:00 台灣時間 夜間分析
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task to run (news/public-info/daily-report/night-analysis)'
+        required: true
+        default: 'daily-report'
+
+jobs:
+  news-monitor:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'news' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run news monitor
+        run: |
+          curl -fsS -X GET \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/news"
+
+  public-info-monitor:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'public-info' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run public info monitor
+        run: |
+          curl -fsS -X GET \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/public-info"
+
+  daily-report:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'daily-report'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run daily report
+        run: |
+          curl -fsS -X GET \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/daily-report"
+
+  night-analysis:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'night-analysis'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run night analysis
+        run: |
+          curl -fsS -X GET \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/night-analysis"
