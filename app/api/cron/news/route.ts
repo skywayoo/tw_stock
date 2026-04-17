@@ -91,7 +91,7 @@ ${headlines}
       }
 
       processed++;
-    } catch { /* skip */ }
+    } catch (e) { debug.push(`${holding.stockId} error: ${String(e).slice(0, 100)}`); }
 
     await new Promise((r) => setTimeout(r, 500)); // rate limit
   }
