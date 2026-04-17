@@ -29,7 +29,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const id = req.nextUrl.searchParams.get('id');
+  const body = await req.json().catch(() => ({}));
+  const id = body.id ?? req.nextUrl.searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
   await deleteHolding(id);
   memDel(KEY);

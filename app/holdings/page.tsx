@@ -58,6 +58,9 @@ export default function HoldingsPage() {
 
           return (
             <div key={h.id} className="rounded-xl bg-gray-900 overflow-hidden">
+              <div className="flex items-center justify-between px-4 pt-4 pb-0">
+                <Link href={`/holdings/${h.id}`} className="text-xs text-blue-400">編輯</Link>
+              </div>
               <button className="w-full p-4 text-left" onClick={() => setExpanded(isOpen ? null : h.id)}>
                 <div className="flex items-start justify-between">
                   <div>

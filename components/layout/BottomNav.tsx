@@ -1,13 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart2, BookOpen, Newspaper, TrendingUp, Settings } from 'lucide-react';
+import { BarChart2, BookOpen, Newspaper, DollarSign, Settings } from 'lucide-react';
 
 const nav = [
   { href: '/', label: '總覽', icon: BarChart2 },
   { href: '/holdings', label: '庫存', icon: BookOpen },
   { href: '/news', label: '新聞', icon: Newspaper },
-  { href: '/reports', label: '報告', icon: TrendingUp },
+  { href: '/realized', label: '損益', icon: DollarSign },
   { href: '/settings', label: '設定', icon: Settings },
 ];
 

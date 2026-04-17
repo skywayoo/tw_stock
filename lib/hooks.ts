@@ -1,6 +1,6 @@
 'use client';
 import useSWR from 'swr';
-import { Holding, ExDividend, Lending, NewsDigest, PublicInfo, DailyReport } from '@/types';
+import { Holding, ExDividend, Lending, NewsDigest, PublicInfo, DailyReport, RealizedPnl } from '@/types';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -33,6 +33,11 @@ export function usePublicInfos() {
 export function useDailyReports() {
   const { data, isLoading, mutate } = useSWR<DailyReport[]>('/api/notion/daily-report', fetcher);
   return { reports: data ?? [], isLoading, mutate };
+}
+
+export function useRealizedPnls() {
+  const { data, error, isLoading, mutate } = useSWR<RealizedPnl[]>('/api/notion/realized', fetcher);
+  return { realizedPnls: data ?? [], isLoading, error, mutate };
 }
 
 export function useStockPrices(stockIds: string[]) {

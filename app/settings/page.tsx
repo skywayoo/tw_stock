@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import Header from '@/components/layout/Header';
 import { useHoldings } from '@/lib/hooks';
 
@@ -36,6 +37,13 @@ export default function SettingsPage() {
               {testing === key && <span className="text-xs text-gray-400">執行中...</span>}
             </button>
           ))}
+        </div>
+
+        <div className="rounded-xl bg-gray-900 p-4 space-y-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">其他</p>
+          <Link href="/reports" className="block w-full rounded-lg bg-gray-800 px-4 py-2.5 text-left text-sm text-white hover:bg-gray-700">
+            每日報告
+          </Link>
         </div>
 
         <div className="rounded-xl bg-gray-900 p-4">

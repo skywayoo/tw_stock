@@ -86,3 +86,17 @@ export interface HoldingSnapshot {
   change: number;
   changePct: number;
 }
+
+// ============ Realized P&L ============
+export interface RealizedPnl {
+  id: string;
+  stockId: string;
+  stockName: string;
+  shares: number;        // 張數
+  buyPrice: number;      // 買入均價(元/股)
+  sellPrice: number;     // 賣出均價(元/股)
+  sellDate: string;      // ISO date
+  dividendDeducted: number; // 已扣除股利(元/股)
+  lendingInterest: number;  // 借券利息收入(元，總額)
+  notes?: string;
+}

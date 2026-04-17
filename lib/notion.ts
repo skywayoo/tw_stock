@@ -1,7 +1,20 @@
 import { Client } from '@notionhq/client';
-import { Holding, ExDividend, Lending, NewsDigest, PublicInfo, DailyReport } from '@/types';
+import { Holding, ExDividend, Lending, NewsDigest, PublicInfo, DailyReport, RealizedPnl } from '@/types';
 
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
+
+async function queryDB(dbId: string, body: Record<string, unknown> = {}): Promise<{ results: Record<string, unknown>[] }> {
+  const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.NOTION_API_KEY}`,
+      'Content-Type': 'application/json',
+      'Notion-Version': '2022-06-28',
+    },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
 
 const DB = {
   HOLDINGS: process.env.NOTION_HOLDINGS_DB_ID!,
@@ -10,6 +23,7 @@ const DB = {
   NEWS: process.env.NOTION_NEWS_DB_ID!,
   PUBLIC_INFO: process.env.NOTION_PUBLIC_INFO_DB_ID!,
   DAILY_REPORT: process.env.NOTION_DAILY_REPORT_DB_ID!,
+  REALIZED: process.env.NOTION_REALIZED_DB_ID!,
 };
 
 // ============ Helpers ============
@@ -44,7 +58,7 @@ function id(p: Record<string, unknown>): string {
 
 // ============ Holdings ============
 export async function getHoldings(): Promise<Holding[]> {
-  const r = await notion.dataSources.query({ data_source_id: DB.HOLDINGS, sorts: [{ property: 'StockId', direction: 'ascending' }] });
+  const r = await queryDB(DB.HOLDINGS, { sorts: [{ property: 'StockId', direction: 'ascending' }] });
   return r.results.map((p) => {
     const pg = p as Record<string, unknown>;
     return {
@@ -57,7 +71,7 @@ export async function getHoldings(): Promise<Holding[]> {
 
 export async function createHolding(h: Omit<Holding, 'id' | 'currentPrice'>): Promise<string> {
   const r = await notion.pages.create({
-    parent: { data_source_id: DB.HOLDINGS },
+    parent: { database_id: DB.HOLDINGS },
     properties: {
       Name: { title: [{ text: { content: h.stockName } }] },
       StockId: { rich_text: [{ text: { content: h.stockId } }] },
@@ -75,6 +89,8 @@ export async function updateHolding(id: string, data: Partial<Holding>): Promise
   if (data.stockName) props.Name = { title: [{ text: { content: data.stockName } }] };
   if (data.shares !== undefined) props.Shares = { number: data.shares };
   if (data.avgCost !== undefined) props.AvgCost = { number: data.avgCost };
+  if (data.buyDate) props.BuyDate = { date: { start: data.buyDate } };
+  if (data.notes !== undefined) props.Notes = { rich_text: [{ text: { content: data.notes ?? '' } }] };
   await notion.pages.update({ page_id: id, properties: props } as Parameters<typeof notion.pages.update>[0]);
 }
 
@@ -84,7 +100,7 @@ export async function deleteHolding(id: string): Promise<void> {
 
 // ============ Ex-Dividend ============
 export async function getExDividends(): Promise<ExDividend[]> {
-  const r = await notion.dataSources.query({ data_source_id: DB.EX_DIVIDEND, sorts: [{ property: 'ExDate', direction: 'descending' }] });
+  const r = await queryDB(DB.EX_DIVIDEND, { sorts: [{ property: 'ExDate', direction: 'descending' }] });
   return r.results.map((p) => {
     const pg = p as Record<string, unknown>;
     return {
@@ -98,7 +114,7 @@ export async function getExDividends(): Promise<ExDividend[]> {
 
 export async function createExDividend(e: Omit<ExDividend, 'id'>): Promise<string> {
   const r = await notion.pages.create({
-    parent: { data_source_id: DB.EX_DIVIDEND },
+    parent: { database_id: DB.EX_DIVIDEND },
     properties: {
       Name: { title: [{ text: { content: e.stockName } }] },
       StockId: { rich_text: [{ text: { content: e.stockId } }] },
@@ -118,7 +134,7 @@ export async function toggleDeductFromCost(id: string, value: boolean): Promise<
 
 // ============ Lending ============
 export async function getLendings(): Promise<Lending[]> {
-  const r = await notion.dataSources.query({ data_source_id: DB.LENDING });
+  const r = await queryDB(DB.LENDING);
   return r.results.map((p) => {
     const pg = p as Record<string, unknown>;
     return {
@@ -132,7 +148,7 @@ export async function getLendings(): Promise<Lending[]> {
 
 export async function createLending(l: Omit<Lending, 'id'>): Promise<string> {
   const r = await notion.pages.create({
-    parent: { data_source_id: DB.LENDING },
+    parent: { database_id: DB.LENDING },
     properties: {
       Name: { title: [{ text: { content: l.stockName } }] },
       StockId: { rich_text: [{ text: { content: l.stockId } }] },
@@ -164,12 +180,11 @@ export async function updateLendingInterest(id: string, interest: number): Promi
 // ============ News ============
 export async function getNews(stockId?: string, limit = 50): Promise<NewsDigest[]> {
   const filter = stockId ? { property: 'StockId', rich_text: { equals: stockId } } : undefined;
-  const r = await notion.dataSources.query({
-    data_source_id: DB.NEWS,
+  const r = await queryDB(DB.NEWS, {
     filter,
     sorts: [{ property: 'Date', direction: 'descending' }],
     page_size: limit,
-  } as Parameters<typeof notion.dataSources.query>[0]);
+  });
   return r.results.map((p) => {
     const pg = p as Record<string, unknown>;
     return {
@@ -183,7 +198,7 @@ export async function getNews(stockId?: string, limit = 50): Promise<NewsDigest[
 
 export async function createNews(n: Omit<NewsDigest, 'id'>): Promise<string> {
   const r = await notion.pages.create({
-    parent: { data_source_id: DB.NEWS },
+    parent: { database_id: DB.NEWS },
     properties: {
       Name: { title: [{ text: { content: n.stockName } }] },
       StockId: { rich_text: [{ text: { content: n.stockId } }] },
@@ -200,8 +215,7 @@ export async function createNews(n: Omit<NewsDigest, 'id'>): Promise<string> {
 
 // ============ Public Info ============
 export async function getPublicInfos(limit = 30): Promise<PublicInfo[]> {
-  const r = await notion.dataSources.query({
-    data_source_id: DB.PUBLIC_INFO,
+  const r = await queryDB(DB.PUBLIC_INFO, {
     sorts: [{ property: 'Date', direction: 'descending' }],
     page_size: limit,
   });
@@ -218,7 +232,7 @@ export async function getPublicInfos(limit = 30): Promise<PublicInfo[]> {
 
 export async function createPublicInfo(info: Omit<PublicInfo, 'id'>): Promise<string> {
   const r = await notion.pages.create({
-    parent: { data_source_id: DB.PUBLIC_INFO },
+    parent: { database_id: DB.PUBLIC_INFO },
     properties: {
       Name: { title: [{ text: { content: info.stockName } }] },
       StockId: { rich_text: [{ text: { content: info.stockId } }] },
@@ -234,8 +248,7 @@ export async function createPublicInfo(info: Omit<PublicInfo, 'id'>): Promise<st
 
 // ============ Daily Report ============
 export async function getDailyReports(limit = 30): Promise<DailyReport[]> {
-  const r = await notion.dataSources.query({
-    data_source_id: DB.DAILY_REPORT,
+  const r = await queryDB(DB.DAILY_REPORT, {
     sorts: [{ property: 'Date', direction: 'descending' }],
     page_size: limit,
   });
@@ -254,7 +267,7 @@ export async function getDailyReports(limit = 30): Promise<DailyReport[]> {
 
 export async function createDailyReport(report: Omit<DailyReport, 'id'>): Promise<string> {
   const r = await notion.pages.create({
-    parent: { data_source_id: DB.DAILY_REPORT },
+    parent: { database_id: DB.DAILY_REPORT },
     properties: {
       Name: { title: [{ text: { content: `${report.date} 日報` } }] },
       Date: { date: { start: report.date } },
@@ -267,4 +280,39 @@ export async function createDailyReport(report: Omit<DailyReport, 'id'>): Promis
     },
   } as Parameters<typeof notion.pages.create>[0]);
   return r.id;
+}
+
+// ============ Realized P&L ============
+export async function getRealizedPnls(): Promise<RealizedPnl[]> {
+  const r = await queryDB(DB.REALIZED, {
+    sorts: [{ property: 'SellDate', direction: 'descending' }],
+  });
+  return r.results.map((p) => {
+    const pg = p as Record<string, unknown>;
+    return {
+      id: id(pg), stockId: getRich(pg, 'StockId'), stockName: getTitle(pg),
+      shares: getNum(pg, 'Shares'), buyPrice: getNum(pg, 'BuyPrice'),
+      sellPrice: getNum(pg, 'SellPrice'), sellDate: getDate(pg, 'SellDate'),
+      dividendDeducted: getNum(pg, 'DividendDeducted'), lendingInterest: getNum(pg, 'LendingInterest'),
+      notes: getRich(pg, 'Notes') || undefined,
+    };
+  });
+}
+
+export async function createRealizedPnl(r: Omit<RealizedPnl, 'id'>): Promise<string> {
+  const res = await notion.pages.create({
+    parent: { database_id: DB.REALIZED },
+    properties: {
+      Name: { title: [{ text: { content: r.stockName } }] },
+      StockId: { rich_text: [{ text: { content: r.stockId } }] },
+      Shares: { number: r.shares },
+      BuyPrice: { number: r.buyPrice },
+      SellPrice: { number: r.sellPrice },
+      SellDate: { date: { start: r.sellDate } },
+      DividendDeducted: { number: r.dividendDeducted },
+      LendingInterest: { number: r.lendingInterest },
+      Notes: { rich_text: [{ text: { content: r.notes || '' } }] },
+    },
+  } as Parameters<typeof notion.pages.create>[0]);
+  return res.id;
 }
