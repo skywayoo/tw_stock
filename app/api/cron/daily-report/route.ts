@@ -24,7 +24,7 @@ async function getPrevClose(stockId: string): Promise<number> {
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('x-cron-secret');
-  if (authHeader !== process.env.CRON_SECRET) {
+  if (authHeader?.trim() !== process.env.CRON_SECRET?.trim()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
