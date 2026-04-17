@@ -24,7 +24,7 @@ export default function DashboardPage() {
     const cost = h.avgCost * h.shares * 1000;
     totalValue += value;
     totalCost += cost;
-    return { ...h, price: p?.price, change: p?.change, changePct: p?.changePct, isTrading: p?.isTrading, value, cost };
+    return { ...h, price: p?.price, change: p?.change, changePct: p?.changePct, isTrading: p?.isTrading, limitUp: p?.limitUp, limitDown: p?.limitDown, value, cost };
   });
 
   const totalPnl = totalValue - totalCost;
@@ -87,14 +87,18 @@ export default function DashboardPage() {
         ) : (
           <div className="space-y-2">
             {holdingRows.map((h) => (
-              <Link key={h.id} href={`/holdings/${h.id}`} className="block rounded-xl bg-gray-900 p-4 hover:bg-gray-800 transition-colors">
+              <Link key={h.id} href={`/holdings/${h.id}`} className={`block rounded-xl p-4 transition-colors ${h.limitUp ? 'bg-red-950 hover:bg-red-900 ring-1 ring-red-500' : h.limitDown ? 'bg-green-950 hover:bg-green-900 ring-1 ring-green-600' : 'bg-gray-900 hover:bg-gray-800'}`}>
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="font-semibold text-white">{h.stockName}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-white">{h.stockName}</p>
+                      {h.limitUp && <span className="animate-pulse rounded px-1.5 py-0.5 text-[10px] font-bold bg-red-500 text-white">漲停</span>}
+                      {h.limitDown && <span className="animate-pulse rounded px-1.5 py-0.5 text-[10px] font-bold bg-green-600 text-white">跌停</span>}
+                    </div>
                     <p className="text-xs text-gray-500">{h.stockId} · {h.shares}張</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-white">{h.price ? `${h.price}元` : '--'}</p>
+                    <p className={`font-bold ${h.limitUp ? 'text-red-400' : h.limitDown ? 'text-green-400' : 'text-white'}`}>{h.price ? `${h.price}元` : '--'}</p>
                     {h.changePct !== undefined && (
                       <p className={`text-xs font-medium ${(h.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {(h.changePct ?? 0) >= 0 ? '▲' : '▼'} {Math.abs(h.changePct ?? 0).toFixed(2)}%

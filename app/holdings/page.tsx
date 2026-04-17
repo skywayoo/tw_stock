@@ -48,6 +48,8 @@ export default function HoldingsPage() {
           <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" /></div>
         ) : holdings.map((h) => {
           const p = prices[h.stockId];
+          const limitUp = p?.limitUp;
+          const limitDown = p?.limitDown;
           const exDivs = exDividends.filter((e) => e.stockId === h.stockId);
           const activeLendings = lendings.filter((l) => l.stockId === h.stockId && l.isActive);
           const isOpen = expanded === h.id;
@@ -57,19 +59,23 @@ export default function HoldingsPage() {
           const effectiveCost = h.avgCost - totalDeducted;
 
           return (
-            <div key={h.id} className="rounded-xl bg-gray-900 overflow-hidden">
+            <div key={h.id} className={`rounded-xl overflow-hidden ${limitUp ? 'ring-1 ring-red-500 bg-red-950' : limitDown ? 'ring-1 ring-green-600 bg-green-950' : 'bg-gray-900'}`}>
               <div className="flex items-center justify-between px-4 pt-4 pb-0">
                 <Link href={`/holdings/${h.id}`} className="text-xs text-blue-400">編輯</Link>
               </div>
               <button className="w-full p-4 text-left" onClick={() => setExpanded(isOpen ? null : h.id)}>
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="font-semibold text-white">{h.stockName} <span className="text-xs text-gray-500">{h.stockId}</span></p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-white">{h.stockName} <span className="text-xs text-gray-500">{h.stockId}</span></p>
+                      {limitUp && <span className="animate-pulse rounded px-1.5 py-0.5 text-[10px] font-bold bg-red-500 text-white">漲停</span>}
+                      {limitDown && <span className="animate-pulse rounded px-1.5 py-0.5 text-[10px] font-bold bg-green-600 text-white">跌停</span>}
+                    </div>
                     <p className="text-xs text-gray-500 mt-0.5">{h.shares}張 · 成本 {h.avgCost}元{totalDeducted > 0 ? ` (實際 ${effectiveCost.toFixed(2)}元)` : ''}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right">
-                      <p className="font-bold text-white">{p?.price ?? '--'}</p>
+                      <p className={`font-bold ${limitUp ? 'text-red-400' : limitDown ? 'text-green-400' : 'text-white'}`}>{p?.price ?? '--'}</p>
                       {p && <p className={`text-xs ${(p.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {(p.changePct ?? 0) >= 0 ? '▲' : '▼'}{Math.abs(p.changePct ?? 0).toFixed(2)}%
                       </p>}

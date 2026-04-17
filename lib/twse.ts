@@ -12,6 +12,8 @@ export interface StockPrice {
   volume: number;
   timestamp: string;
   isTrading: boolean;
+  limitUp: boolean;
+  limitDown: boolean;
 }
 
 // TWSE real-time API
@@ -49,6 +51,8 @@ function parseStockInfo(stockId: string, item: Record<string, string>): StockPri
   const price = parseFloat(item.z) || parseFloat(item.y) || 0;
   const prevClose = parseFloat(item.y) || 0;
   const change = price - prevClose;
+  const upperLimit = parseFloat(item.u) || 0;
+  const lowerLimit = parseFloat(item.w) || 0;
   return {
     stockId,
     stockName: item.n || stockId,
@@ -61,6 +65,8 @@ function parseStockInfo(stockId: string, item: Record<string, string>): StockPri
     volume: parseInt(item.v) || 0,
     timestamp: item.t || new Date().toTimeString().slice(0, 5),
     isTrading: !!item.z && item.z !== '-',
+    limitUp: upperLimit > 0 && price >= upperLimit,
+    limitDown: lowerLimit > 0 && price <= lowerLimit,
   };
 }
 

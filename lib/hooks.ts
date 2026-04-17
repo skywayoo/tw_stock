@@ -42,7 +42,7 @@ export function useRealizedPnls() {
 
 export function useStockPrices(stockIds: string[]) {
   const key = stockIds.length > 0 ? `/api/stock/price?ids=${stockIds.join(',')}` : null;
-  const { data, mutate } = useSWR<Record<string, { price: number; change: number; changePct: number; isTrading: boolean }>>(
+  const { data, mutate } = useSWR<Record<string, { price: number; change: number; changePct: number; isTrading: boolean; limitUp: boolean; limitDown: boolean }>>(
     key, fetcher, { refreshInterval: 60_000 } // poll every minute
   );
   return { prices: data ?? {}, mutate };
