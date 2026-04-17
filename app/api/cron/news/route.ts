@@ -39,9 +39,11 @@ export async function GET(request: Request) {
 
   const importantNews: string[] = [];
   let processed = 0;
+  const debug: string[] = [];
 
   for (const holding of holdings) {
     const articles = await fetchGoogleNewsRss(holding.stockId, holding.stockName);
+    debug.push(`${holding.stockId}: ${articles.length} articles`);
     if (articles.length === 0) continue;
 
     const headlines = articles.map((a) => `- ${a.title}`).join('\n');
@@ -99,5 +101,5 @@ ${headlines}
     await sendTelegram(`🚨 <b>重要新聞通知</b>\n\n${importantNews.join('\n\n')}`);
   }
 
-  return NextResponse.json({ processed, important: importantNews.length, total: holdings.length });
+  return NextResponse.json({ processed, important: importantNews.length, total: holdings.length, debug });
 }
