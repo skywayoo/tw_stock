@@ -1,0 +1,20 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/news",
+      "schedule": "30 0 * * 1-5"
+    },
+    {
+      "path": "/api/cron/public-info",
+      "schedule": "0 * * * 1-5"
+    },
+    {
+      "path": "/api/cron/daily-report",
+      "schedule": "40 5 * * 1-5"
+    },
+    {
+      "path": "/api/cron/night-analysis",
+      "schedule": "0 13 * * 1-5"
+    }
+  ]
+}
