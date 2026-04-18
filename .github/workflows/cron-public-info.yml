@@ -2,7 +2,7 @@ name: Cron - 公開資訊
 
 on:
   schedule:
-    - cron: '*/10 1-5 * * 1-5'  # 每10分鐘，台灣時間 9:00-13:59，週一到五
+    - cron: '*/10 * * * 1-5'  # 每10分鐘，週一到五
   workflow_dispatch:
 
 jobs:
