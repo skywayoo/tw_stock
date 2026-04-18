@@ -47,3 +47,13 @@ export function useStockPrices(stockIds: string[]) {
   );
   return { prices: data ?? {}, mutate };
 }
+
+export interface SBLData { value: number | null; delta: number | null }
+
+export function useSBL(stockIds: string[]) {
+  const key = stockIds.length > 0 ? `/api/stock/sbl?ids=${stockIds.join(',')}` : null;
+  const { data, mutate } = useSWR<Record<string, SBLData>>(
+    key, fetcher, { refreshInterval: 3_600_000 } // refresh every hour
+  );
+  return { sbl: data ?? {}, mutate };
+}
