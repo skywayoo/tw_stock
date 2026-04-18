@@ -1,13 +1,13 @@
 import { Holding, ExDividend, Lending, NewsDigest, PublicInfo, DailyReport, RealizedPnl } from '@/types';
 
 const DB = {
-  HOLDINGS: process.env.NOTION_HOLDINGS_DB_ID!,
-  EX_DIVIDEND: process.env.NOTION_EX_DIVIDEND_DB_ID!,
-  LENDING: process.env.NOTION_LENDING_DB_ID!,
-  NEWS: process.env.NOTION_NEWS_DB_ID!,
-  PUBLIC_INFO: process.env.NOTION_PUBLIC_INFO_DB_ID!,
-  DAILY_REPORT: process.env.NOTION_DAILY_REPORT_DB_ID!,
-  REALIZED: process.env.NOTION_REALIZED_DB_ID!,
+  HOLDINGS: process.env.NOTION_HOLDINGS_DB_ID!.trim(),
+  EX_DIVIDEND: process.env.NOTION_EX_DIVIDEND_DB_ID!.trim(),
+  LENDING: process.env.NOTION_LENDING_DB_ID!.trim(),
+  NEWS: process.env.NOTION_NEWS_DB_ID!.trim(),
+  PUBLIC_INFO: process.env.NOTION_PUBLIC_INFO_DB_ID!.trim(),
+  DAILY_REPORT: process.env.NOTION_DAILY_REPORT_DB_ID!.trim(),
+  REALIZED: process.env.NOTION_REALIZED_DB_ID!.trim(),
 };
 
 const HEADERS = () => ({
@@ -139,6 +139,7 @@ export async function getLendings(): Promise<Lending[]> {
     id: pid(p), stockId: getRich(p, 'StockId'), stockName: getTitle(p),
     sharesLent: getNum(p, 'SharesLent'), startDate: getDate(p, 'StartDate'),
     endDate: getDate(p, 'EndDate') || undefined, annualRate: getNum(p, 'AnnualRate'),
+    brokerFee: getNum(p, 'BrokerFee'),
     accruedInterest: getNum(p, 'AccruedInterest'), isActive: getBool(p, 'IsActive'),
   }));
 }
@@ -150,15 +151,23 @@ export async function createLending(l: Omit<Lending, 'id'>): Promise<string> {
     SharesLent: { number: l.sharesLent },
     StartDate: { date: { start: l.startDate } },
     AnnualRate: { number: l.annualRate },
+    BrokerFee: { number: l.brokerFee },
     AccruedInterest: { number: 0 },
     IsActive: { checkbox: true },
   });
 }
 
-export async function returnLending(id: string, endDate: string, totalInterest: number): Promise<void> {
+export async function returnLending(
+  id: string, endDate: string, totalInterest: number,
+  grossInterest?: number, brokerFeeAmount?: number, withholdingTax?: number, netInterest?: number
+): Promise<void> {
   await updatePage(id, { properties: {
     EndDate: { date: { start: endDate } },
     AccruedInterest: { number: totalInterest },
+    ...(grossInterest != null && { GrossInterest: { number: grossInterest } }),
+    ...(brokerFeeAmount != null && { BrokerFeeAmount: { number: brokerFeeAmount } }),
+    ...(withholdingTax != null && { WithholdingTax: { number: withholdingTax } }),
+    ...(netInterest != null && { NetInterest: { number: netInterest } }),
     IsActive: { checkbox: false },
   }});
 }

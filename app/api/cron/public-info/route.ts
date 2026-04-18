@@ -35,22 +35,35 @@ async function fetchMopsAnnouncements(stockId: string): Promise<{ title: string;
 }
 
 // Fetch ex-dividend info from TWSE
-async function fetchExDividendInfo(stockId: string): Promise<{ exDate: string; cash: number; stock: number } | null> {
+// Fetch announced ex-dividends for the current year from TWSE TWT48U
+async function fetchExDividendInfo(stockId: string): Promise<{ exDate: string; cash: number; stock: number }[]> {
   try {
+    const year = new Date().getFullYear();
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const res = await fetch(
-      `https://www.twse.com.tw/en/trading/historical/exDividend.json?response=json&stockNo=${stockId}`,
-      { cache: 'no-store' }
+      `https://www.twse.com.tw/exchangeReport/TWT48U?response=json&strDate=${year}0101&endDate=${year}1231`,
+      { cache: 'no-store', headers: { 'Referer': 'https://www.twse.com.tw' } }
     );
     const data = await res.json() as { data?: string[][] };
-    const row = data.data?.[0];
-    if (!row) return null;
-    return {
-      exDate: row[0] || '',
-      cash: parseFloat(row[2]) || 0,
-      stock: parseFloat(row[3]) || 0,
-    };
+    if (!data.data?.length) return [];
+
+    return data.data
+      .filter((row) => row[1]?.trim() === stockId) // filter by stock ID
+      .map((row) => {
+        // row[0]: "115年04月20日" → convert to YYYY-MM-DD
+        const m = row[0].match(/(\d+)年(\d+)月(\d+)日/);
+        if (!m) return null;
+        const exDate = `${parseInt(m[1]) + 1911}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+        const cashRaw = row[7] ?? '';
+        const cash = parseFloat(cashRaw.replace(/<[^>]+>/g, '').trim()) || 0;
+        const stock = parseFloat(row[4] ?? '0') || 0;
+        return { exDate, cash, stock };
+      })
+      .filter((d): d is { exDate: string; cash: number; stock: number } =>
+        d !== null && (d.cash > 0 || d.stock > 0) // all this year
+      );
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -118,11 +131,12 @@ export async function GET(request: Request) {
       } catch { /* skip */ }
     }
 
-    // Check ex-dividend
-    const exDiv = await fetchExDividendInfo(holding.stockId);
-    if (exDiv && exDiv.exDate) {
+    // Check ex-dividend (upcoming announced this year)
+    const exDivs = await fetchExDividendInfo(holding.stockId);
+    for (const exDiv of exDivs) {
       const key = `${holding.stockId}_${exDiv.exDate}`;
-      if (!existingDates.has(key) && (exDiv.cash > 0 || exDiv.stock > 0)) {
+      if (!existingDates.has(key)) {
+        existingDates.add(key);
         await createExDividend({
           stockId: holding.stockId,
           stockName: holding.stockName,

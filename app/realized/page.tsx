@@ -29,7 +29,7 @@ export default function RealizedPage() {
         {/* Summary */}
         <div className="rounded-xl bg-gray-900 p-4">
           <p className="text-xs text-gray-400 mb-1">累計已實現損益</p>
-          <p className={`text-2xl font-bold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <p className={`text-2xl font-bold ${totalPnl >= 0 ? 'text-red-400' : 'text-green-400'}`}>
             {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)} 元
           </p>
           <p className="text-xs text-gray-500 mt-1">{realizedPnls.length} 筆交易</p>
@@ -52,10 +52,10 @@ export default function RealizedPage() {
                     <p className="text-xs text-gray-500">{r.sellDate} · {r.shares}張</p>
                   </div>
                   <div className="text-right">
-                    <p className={`font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <p className={`font-bold ${pnl >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                       {pnl >= 0 ? '+' : ''}{fmt(pnl)}
                     </p>
-                    <p className={`text-xs ${pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <p className={`text-xs ${pct >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                       {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
                     </p>
                   </div>

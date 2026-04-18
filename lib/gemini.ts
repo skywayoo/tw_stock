@@ -1,10 +1,10 @@
 const MODELS = [
-  'gemma-4-27b-it',
   'gemma-4-31b-it',
   'gemma-4-26b-a4b-it',
+  'gemini-3.1-flash-lite-preview',
+  'gemini-3-flash-preview',
   'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
+  'gemini-2.5-flash-lite',
 ];
 
 interface GeminiPart {
@@ -27,8 +27,8 @@ export async function callGemini(apiKey: string, prompt: string): Promise<string
       error?: { code: number; message: string };
     };
     if (data.error) {
-      if (data.error.code === 429) { lastError = `${model}: quota`; continue; }
-      throw new Error(`${model}: ${data.error.message}`);
+      lastError = `${model}: ${data.error.message}`;
+      continue;
     }
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
   }

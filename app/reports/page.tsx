@@ -20,7 +20,7 @@ export default function ReportsPage() {
             <div key={r.id} className="rounded-xl bg-gray-900 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="font-semibold text-white">{r.date}</p>
-                <p className={`text-sm font-medium ${r.dayChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`text-sm font-medium ${r.dayChange >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                   {r.dayChange >= 0 ? '▲' : '▼'} {fmt(Math.abs(r.dayChange))}元 ({r.dayChange >= 0 ? '+' : ''}{r.dayChangePct.toFixed(2)}%)
                 </p>
               </div>
@@ -34,7 +34,7 @@ export default function ReportsPage() {
                   {r.holdingSnapshots.map((s) => (
                     <div key={s.stockId} className="flex justify-between text-xs">
                       <span className="text-gray-400">{s.stockName}</span>
-                      <span className={s.changePct >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                      <span className={s.changePct >= 0 ? 'text-red-400' : 'text-green-400'}>
                         {s.closePrice}元 ({s.changePct >= 0 ? '+' : ''}{s.changePct.toFixed(2)}%)
                       </span>
                     </div>

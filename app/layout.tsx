@@ -5,7 +5,9 @@ import BottomNav from '@/components/layout/BottomNav';
 export const metadata: Metadata = {
   title: '台股庫存追蹤',
   description: '台灣股票庫存即時追蹤與分析',
+  manifest: '/manifest.json',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: '台股' },
+  icons: { apple: '/apple-touch-icon.png' },
 };
 
 export const viewport: Viewport = {

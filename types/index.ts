@@ -31,6 +31,7 @@ export interface Lending {
   startDate: string;
   endDate?: string;      // 還券日
   annualRate: number;    // 年利率 %
+  brokerFee: number;     // 券商手續費 %
   accruedInterest: number; // 累積利息(元)
   isActive: boolean;
 }

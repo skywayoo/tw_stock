@@ -53,7 +53,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-xs text-gray-500">未實現損益</p>
-              <p className={`text-sm font-semibold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <p className={`text-sm font-semibold ${totalPnl >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                 {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)} ({pct(totalPnlPct)})
               </p>
             </div>
@@ -61,7 +61,7 @@ export default function DashboardPage() {
           {latestReport && (
             <div className="mt-3 border-t border-gray-800 pt-3">
               <p className="text-xs text-gray-500">今日 {latestReport.date}</p>
-              <p className={`text-sm font-medium ${latestReport.dayChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <p className={`text-sm font-medium ${latestReport.dayChange >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                 {latestReport.dayChange >= 0 ? '▲' : '▼'} {fmt(Math.abs(latestReport.dayChange))} ({pct(latestReport.dayChangePct)})
               </p>
             </div>
@@ -95,12 +95,12 @@ export default function DashboardPage() {
                       {h.limitUp && <span className="animate-pulse rounded px-1.5 py-0.5 text-[10px] font-bold bg-red-500 text-white">漲停</span>}
                       {h.limitDown && <span className="animate-pulse rounded px-1.5 py-0.5 text-[10px] font-bold bg-green-600 text-white">跌停</span>}
                     </div>
-                    <p className="text-xs text-gray-500">{h.stockId} · {h.shares}張</p>
+                    <p className="text-xs text-gray-500">{h.stockId} · {(h.shares * 1000).toLocaleString()}股</p>
                   </div>
                   <div className="text-right">
                     <p className={`font-bold ${h.limitUp ? 'text-red-400' : h.limitDown ? 'text-green-400' : 'text-white'}`}>{h.price ? `${h.price}元` : '--'}</p>
                     {h.changePct !== undefined && (
-                      <p className={`text-xs font-medium ${(h.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <p className={`text-xs font-medium ${(h.changePct ?? 0) >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                         {(h.changePct ?? 0) >= 0 ? '▲' : '▼'} {Math.abs(h.changePct ?? 0).toFixed(2)}%
                       </p>
                     )}
@@ -108,7 +108,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="mt-2 flex gap-4 text-xs text-gray-500">
                   <span>成本 {h.avgCost}元</span>
-                  <span className={(h.value - h.cost) >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                  <span className={(h.value - h.cost) >= 0 ? 'text-red-400' : 'text-green-400'}>
                     {(h.value - h.cost) >= 0 ? '+' : ''}{fmt(h.value - h.cost)}元
                   </span>
                 </div>
