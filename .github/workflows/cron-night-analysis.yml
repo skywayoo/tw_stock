@@ -1,0 +1,19 @@
+name: Cron - 夜間分析
+
+on:
+  schedule:
+    - cron: '0 13 * * 1-5'  # 台灣時間 21:00，週一到五
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call night-analysis cron
+        run: |
+          STATUS=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://twstock-rose.vercel.app/api/cron/night-analysis)
+          echo "HTTP $STATUS"
+          cat /tmp/resp.txt
+          [ "$STATUS" = "200" ] || exit 1

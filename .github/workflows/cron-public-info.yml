@@ -1,0 +1,19 @@
+name: Cron - 公開資訊
+
+on:
+  schedule:
+    - cron: '*/10 1-5 * * 1-5'  # 每10分鐘，台灣時間 9:00-13:59，週一到五
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call public-info cron
+        run: |
+          STATUS=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://twstock-rose.vercel.app/api/cron/public-info)
+          echo "HTTP $STATUS"
+          cat /tmp/resp.txt
+          [ "$STATUS" = "200" ] || exit 1
