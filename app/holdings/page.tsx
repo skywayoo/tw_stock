@@ -121,10 +121,10 @@ export default function HoldingsPage() {
                     <div className="flex-1 rounded-xl bg-gray-800 px-3 py-2">
                       <p className="text-xs text-gray-500">可出借 (9B00)</p>
                       <p className="text-sm font-semibold text-purple-400">
-                        {fmt(sblInfo.value)} 股
+                        {fmt(Math.floor(sblInfo.value / 1000))} 張
                         {sblInfo.delta !== null && (
                           <span className={`ml-1 text-xs font-normal ${sblInfo.delta > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                            ({sblInfo.delta > 0 ? '+' : ''}{fmt(sblInfo.delta)})
+                            ({sblInfo.delta > 0 ? '+' : ''}{fmt(Math.floor(sblInfo.delta / 1000))})
                           </span>
                         )}
                       </p>
