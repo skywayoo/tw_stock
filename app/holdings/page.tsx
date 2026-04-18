@@ -145,14 +145,22 @@ function SortableHoldingCard(props: HoldingCardProps) {
           )}
           {sblInfo.value !== null && (
             <div className="flex-1 rounded-xl bg-gray-800 px-3 py-2">
-              <p className="text-xs text-gray-500">可出借 (9B00)</p>
+              <p className="text-xs text-gray-500">可出借 (台新)</p>
               <p className="text-sm font-semibold text-purple-400">
                 {fmt(Math.floor(sblInfo.value / 1000))} 張
-                {sblInfo.delta !== null && (
-                  <span className={`ml-1 text-xs font-normal ${sblInfo.delta > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                    ({sblInfo.delta > 0 ? '+' : ''}{fmt(Math.floor(sblInfo.delta / 1000))})
-                  </span>
-                )}
+              </p>
+              <p className="text-xs text-gray-400">
+                {(() => {
+                  const parts: string[] = [];
+                  if (sblInfo.delta !== null) {
+                    const d = Math.floor(sblInfo.delta / 1000);
+                    parts.push(`${d > 0 ? '+' : ''}${fmt(d)}`);
+                  }
+                  if (sblInfo.ratio !== null) {
+                    parts.push(`${sblInfo.ratio}%${sblInfo.ratioDelta !== null ? ` ${sblInfo.ratioDelta > 0 ? '+' : ''}${sblInfo.ratioDelta}%` : ''}`);
+                  }
+                  return parts.length > 0 ? `(${parts.join(', ')})` : '';
+                })()}
               </p>
             </div>
           )}

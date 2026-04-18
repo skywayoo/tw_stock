@@ -48,7 +48,7 @@ export function useStockPrices(stockIds: string[]) {
   return { prices: data ?? {}, mutate };
 }
 
-export interface SBLData { value: number | null; delta: number | null }
+export interface SBLData { value: number | null; delta: number | null; ratio: number | null; ratioDelta: number | null }
 
 export function useSBL(stockIds: string[]) {
   const key = stockIds.length > 0 ? `/api/stock/sbl?ids=${stockIds.join(',')}` : null;
