@@ -222,6 +222,10 @@ export async function getPublicInfosByType(type: PublicInfo['type'], limit = 50)
     sorts: [{ property: 'Date', direction: 'descending' }],
     page_size: limit,
   });
+  if (!Array.isArray(r.results)) {
+    console.error('getPublicInfosByType Notion error:', JSON.stringify(r).slice(0, 300));
+    return [];
+  }
   return r.results.map((p) => ({
     id: pid(p), stockId: getRich(p, 'StockId'), stockName: getTitle(p),
     date: getDate(p, 'Date'), title: getRich(p, 'Title'),
