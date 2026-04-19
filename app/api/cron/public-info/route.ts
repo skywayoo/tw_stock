@@ -62,112 +62,33 @@ async function fetchExDividendInfo(stockId: string): Promise<{ exDate: string; c
   }
 }
 
-// Fetch monthly revenue from MOPS nas static file
-// Fetch monthly revenue via MOPS ajax_t05st10 (POST, same as announcements - not IP-blocked)
-// Columns: 公司代號, 公司名稱, 當月營收, 上月營收, 去年當月, 上月增減%, 去年同月增減%, 累計, 去年累計, 累計增減%
-async function fetchMonthlyRevenue(stockId: string): Promise<{
-  revenue: number; yoyChange: number; period: string; _debug?: string;
-} | null> {
-  try {
-    const now = new Date();
-    const targetDate = now.getDate() >= 10
-      ? new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      : new Date(now.getFullYear(), now.getMonth() - 2, 1);
-
-    const rocYear = targetDate.getFullYear() - 1911;
-    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
-    const period = `${targetDate.getFullYear()}-${month}`;
-
-    const reqHeaders = {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Referer': 'https://mops.twse.com.tw/mops/web/t05st10_q',
-    };
-    const debugInfo: string[] = [];
-    for (const typek of ['sii', 'otc']) {
-      const res = await fetch('https://mops.twse.com.tw/mops/web/ajax_t05st10_ifrs', {
-        method: 'POST',
-        headers: reqHeaders,
-        body: `encodeURIComponent=1&step=1&TYPEK=${typek}&code=${stockId}&year=${rocYear}&month=${month}`,
-        cache: 'no-store',
-      });
-      if (!res.ok) { debugInfo.push(`${typek}:http_${res.status}`); continue; }
-      const buffer = await res.arrayBuffer();
-      const html = new TextDecoder('big5').decode(buffer);
-      if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行')) {
-        debugInfo.push(`${typek}:blocked`); continue;
-      }
-      for (const rowMatch of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
-        const cells = [...rowMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
-          .map((m) => m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim());
-        if (cells[0] === stockId) {
-          const revenue = parseInt(cells[2]?.replace(/,/g, '') || '0');
-          const yoyChange = parseFloat(cells[6] || '0');
-          return { revenue, yoyChange, period };
-        }
-      }
-      debugInfo.push(`${typek}:not_found(len=${html.length})`);
-    }
-    return { revenue: 0, yoyChange: 0, period, _debug: debugInfo.join(',') };
-  } catch (e) {
-    return { revenue: 0, yoyChange: 0, period: 'err', _debug: String(e) };
-  }
+// Parse revenue for a stock from pre-fetched TWSE t187ap05_L dataset
+function parseRevenue(
+  stockId: string, dataset: Record<string, string>[]
+): { revenue: number; yoyChange: number; period: string; _debug?: string } {
+  const row = dataset.find((d) => d['公司代號'] === stockId);
+  if (!row) return { revenue: 0, yoyChange: 0, period: '', _debug: 'not_in_listed_dataset' };
+  const ym = row['資料年月'] ?? '';
+  const rocYear = parseInt(ym.slice(0, -2));
+  const month = ym.slice(-2);
+  const period = `${rocYear + 1911}-${month}`;
+  const revenue = parseInt((row['營業收入-當月營收'] ?? '0').replace(/,/g, '')) || 0;
+  const yoyChange = parseFloat(row['營業收入-去年同月增減(%)'] ?? '0') || 0;
+  return { revenue, yoyChange, period };
 }
 
-// Fetch latest quarterly EPS from MOPS (tries both sii and otc market types)
-async function fetchLatestEPS(stockId: string): Promise<{
-  eps: number; period: string; _debug?: string;
-} | null> {
-  try {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-
-    // Q4/Annual published by Mar 31 → available Apr+
-    // Q1 published by May 15 → available May+
-    // Q2 published by Aug 14 → available Aug+
-    // Q3 published by Nov 14 → available Nov+
-    let quarter: number;
-    let reportYear: number;
-    if (month >= 5 && month <= 7) { quarter = 1; reportYear = year; }
-    else if (month >= 8 && month <= 10) { quarter = 2; reportYear = year; }
-    else if (month >= 11) { quarter = 3; reportYear = year; }
-    else if (month >= 4) { quarter = 4; reportYear = year - 1; }
-    else { quarter = 3; reportYear = year - 1; }
-
-    const rocYear = reportYear - 1911;
-    const period = `${reportYear}Q${quarter}`;
-    const debugInfo: string[] = [];
-
-    for (const typek of ['sii', 'otc']) {
-      const res = await fetch('https://mops.twse.com.tw/mops/web/ajax_t163sb04', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': 'https://mops.twse.com.tw/mops/web/t163sb04',
-        },
-        body: `encodeURIComponent=1&step=1&TYPEK=${typek}&code=${stockId}&year=${rocYear}&season=${quarter}`,
-        cache: 'no-store',
-      });
-      if (!res.ok) { debugInfo.push(`${typek}:http_${res.status}`); continue; }
-      const buffer = await res.arrayBuffer();
-      const html = new TextDecoder('big5').decode(buffer);
-      if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行')) {
-        debugInfo.push(`${typek}:blocked`); continue;
-      }
-      const epsMatch = html.match(/基本每股盈餘[^<]*<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/);
-      if (epsMatch) {
-        const raw = epsMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim();
-        const eps = parseFloat(raw);
-        if (!isNaN(eps)) return { eps, period };
-      }
-      debugInfo.push(`${typek}:no_match(len=${html.length})`);
-    }
-    return { eps: 0, period, _debug: debugInfo.join(',') };
-  } catch (e) {
-    return { eps: 0, period: 'err', _debug: String(e) };
-  }
+// Parse EPS for a stock from pre-fetched TWSE t187ap06_L_ci dataset
+function parseEPS(
+  stockId: string, dataset: Record<string, string>[]
+): { eps: number; period: string; _debug?: string } {
+  const row = dataset.find((d) => d['公司代號'] === stockId);
+  if (!row) return { eps: 0, period: '', _debug: 'not_in_listed_dataset' };
+  const rocYear = parseInt(row['年度'] ?? '0');
+  const quarter = parseInt(row['季別'] ?? '0');
+  const period = `${rocYear + 1911}Q${quarter}`;
+  const eps = parseFloat(row['基本每股盈餘（元）'] ?? 'NaN');
+  if (isNaN(eps)) return { eps: 0, period, _debug: 'eps_field_empty' };
+  return { eps, period };
 }
 
 export async function GET(request: Request) {
@@ -188,6 +109,19 @@ export async function GET(request: Request) {
   const existingEps = await getPublicInfosByType('eps', 50);
   const seenRevenue = new Set(existingRevenue.map((r) => `${r.stockId}_${r.title}`));
   const seenEps = new Set(existingEps.map((r) => `${r.stockId}_${r.title}`));
+
+  // Fetch TWSE OpenAPI datasets once (covers listed stocks, not OTC)
+  const twseHeaders = { 'Referer': 'https://www.twse.com.tw' };
+  let revenueDataset: Record<string, string>[] = [];
+  let epsDataset: Record<string, string>[] = [];
+  try {
+    const [revRes, epsRes] = await Promise.all([
+      fetch('https://openapi.twse.com.tw/v1/opendata/t187ap05_L', { cache: 'no-store', headers: twseHeaders }),
+      fetch('https://openapi.twse.com.tw/v1/opendata/t187ap06_L_ci', { cache: 'no-store', headers: twseHeaders }),
+    ]);
+    if (revRes.ok) revenueDataset = await revRes.json() as Record<string, string>[];
+    if (epsRes.ok) epsDataset = await epsRes.json() as Record<string, string>[];
+  } catch { /* datasets stay empty, stocks will show _debug: not_in_listed_dataset */ }
 
   const alerts: string[] = [];
   const debug: Record<string, unknown> = {};
@@ -264,7 +198,7 @@ export async function GET(request: Request) {
     }
 
     // ── 3. Monthly Revenue ────────────────────────────────────────────────
-    const rev = await fetchMonthlyRevenue(holding.stockId);
+    const rev = parseRevenue(holding.stockId, revenueDataset);
     debug[`rev_${holding.stockId}`] = rev;
     if (rev && !('_debug' in rev)) {
       const revKey = `${holding.stockId}_${rev.period}月營收`;
@@ -288,7 +222,7 @@ export async function GET(request: Request) {
     }
 
     // ── 4. Quarterly EPS ──────────────────────────────────────────────────
-    const epsData = await fetchLatestEPS(holding.stockId);
+    const epsData = parseEPS(holding.stockId, epsDataset);
     debug[`eps_${holding.stockId}`] = epsData;
     if (epsData && !('_debug' in epsData)) {
       const epsKey = `${holding.stockId}_${epsData.period}EPS`;
