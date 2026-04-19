@@ -65,10 +65,9 @@ async function fetchExDividendInfo(stockId: string): Promise<{ exDate: string; c
 // Fetch monthly revenue from MOPS nas static file
 // Column order: 公司代號, 公司名稱, 當月營收, 上月營收, 去年當月, 上月增減%, 去年同月增減%, 累計, 去年累計, 累計增減%
 async function fetchMonthlyRevenue(stockId: string): Promise<{
-  revenue: number; yoyChange: number; period: string;
+  revenue: number; yoyChange: number; period: string; _debug?: string;
 } | null> {
   try {
-    // Revenue for month M is released ~10th of month M+1
     const now = new Date();
     const targetDate = now.getDate() >= 10
       ? new Date(now.getFullYear(), now.getMonth() - 1, 1)
@@ -86,12 +85,12 @@ async function fetchMonthlyRevenue(stockId: string): Promise<{
       },
       cache: 'no-store',
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { revenue: 0, yoyChange: 0, period, _debug: `http_${res.status}_url_${url}` };
 
     const buffer = await res.arrayBuffer();
-    // MOPS files are Big5 encoded
     const html = new TextDecoder('big5').decode(buffer);
-    if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行')) return null;
+    if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行'))
+      return { revenue: 0, yoyChange: 0, period, _debug: `blocked_url_${url}` };
 
     for (const rowMatch of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
       const cells = [...rowMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
@@ -102,9 +101,9 @@ async function fetchMonthlyRevenue(stockId: string): Promise<{
         return { revenue, yoyChange, period };
       }
     }
-    return null;
-  } catch {
-    return null;
+    return { revenue: 0, yoyChange: 0, period, _debug: `not_found_in_html_len_${html.length}` };
+  } catch (e) {
+    return { revenue: 0, yoyChange: 0, period: 'err', _debug: String(e) };
   }
 }
 
@@ -144,11 +143,12 @@ async function fetchLatestEPS(stockId: string): Promise<{
       body: `encodeURIComponent=1&step=1&TYPEK=sii&code=${stockId}&year=${rocYear}&season=${season}`,
       cache: 'no-store',
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { eps: 0, period, _debug: `http_${res.status}` } as never;
 
     const buffer = await res.arrayBuffer();
     const html = new TextDecoder('big5').decode(buffer);
-    if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行')) return null;
+    if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行'))
+      return { eps: 0, period, _debug: 'blocked' } as never;
 
     // Find "基本每股盈餘" row and extract value
     const epsMatch = html.match(/基本每股盈餘[^<]*<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/);
@@ -157,9 +157,9 @@ async function fetchLatestEPS(stockId: string): Promise<{
       const eps = parseFloat(raw);
       if (!isNaN(eps)) return { eps, period };
     }
-    return null;
-  } catch {
-    return null;
+    return { eps: 0, period, _debug: `no_match_html_len_${html.length}` } as never;
+  } catch (e) {
+    return { eps: 0, period: 'err', _debug: String(e) } as never;
   }
 }
 
@@ -259,7 +259,7 @@ export async function GET(request: Request) {
     // ── 3. Monthly Revenue ────────────────────────────────────────────────
     const rev = await fetchMonthlyRevenue(holding.stockId);
     debug[`rev_${holding.stockId}`] = rev;
-    if (rev) {
+    if (rev && !('_debug' in rev)) {
       const revKey = `${holding.stockId}_${rev.period}月營收`;
       if (!seenRevenue.has(revKey)) {
         seenRevenue.add(revKey);
@@ -283,7 +283,7 @@ export async function GET(request: Request) {
     // ── 4. Quarterly EPS ──────────────────────────────────────────────────
     const epsData = await fetchLatestEPS(holding.stockId);
     debug[`eps_${holding.stockId}`] = epsData;
-    if (epsData) {
+    if (epsData && !('_debug' in epsData)) {
       const epsKey = `${holding.stockId}_${epsData.period}EPS`;
       if (!seenEps.has(epsKey)) {
         seenEps.add(epsKey);
