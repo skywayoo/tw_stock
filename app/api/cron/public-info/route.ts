@@ -124,7 +124,6 @@ export async function GET(request: Request) {
   } catch { /* datasets stay empty, stocks will show _debug: not_in_listed_dataset */ }
 
   const alerts: string[] = [];
-  const debug: Record<string, unknown> = {};
 
   for (const holding of holdings) {
     // ── 1. MOPS Announcements ──────────────────────────────────────────────
@@ -199,7 +198,6 @@ export async function GET(request: Request) {
 
     // ── 3. Monthly Revenue ────────────────────────────────────────────────
     const rev = parseRevenue(holding.stockId, revenueDataset);
-    debug[`rev_${holding.stockId}`] = rev;
     if (rev && !('_debug' in rev)) {
       const revKey = `${holding.stockId}_${rev.period}月營收`;
       if (!seenRevenue.has(revKey)) {
@@ -223,7 +221,6 @@ export async function GET(request: Request) {
 
     // ── 4. Quarterly EPS ──────────────────────────────────────────────────
     const epsData = parseEPS(holding.stockId, epsDataset);
-    debug[`eps_${holding.stockId}`] = epsData;
     if (epsData && !('_debug' in epsData)) {
       const epsKey = `${holding.stockId}_${epsData.period}EPS`;
       if (!seenEps.has(epsKey)) {
@@ -249,5 +246,5 @@ export async function GET(request: Request) {
     await sendTelegram(`📋 <b>重大公告通知</b>\n\n${alerts.join('\n\n')}`);
   }
 
-  return NextResponse.json({ processed: holdings.length, alerts: alerts.length, debug });
+  return NextResponse.json({ processed: holdings.length, alerts: alerts.length });
 }
