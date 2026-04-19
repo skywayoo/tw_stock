@@ -107,8 +107,8 @@ export async function GET(request: Request) {
   // Load existing revenue/EPS records for dedup
   const existingRevenue = await getPublicInfosByType('revenue', 50);
   const existingEps = await getPublicInfosByType('eps', 50);
-  const seenRevenue = new Set(existingRevenue.map((r) => `${r.stockId}_${r.title}`));
-  const seenEps = new Set(existingEps.map((r) => `${r.stockId}_${r.title}`));
+  const seenRevenue = new Set(existingRevenue.map((r) => r.title));
+  const seenEps = new Set(existingEps.map((r) => r.title));
 
   // Fetch TWSE OpenAPI datasets once (covers listed stocks, not OTC)
   const twseHeaders = { 'Referer': 'https://www.twse.com.tw' };
