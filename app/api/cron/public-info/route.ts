@@ -183,6 +183,7 @@ export async function GET(request: Request) {
   const seenEps = new Set(existingEps.map((r) => `${r.stockId}_${r.title}`));
 
   const alerts: string[] = [];
+  const debug: Record<string, unknown> = {};
 
   for (const holding of holdings) {
     // ── 1. MOPS Announcements ──────────────────────────────────────────────
@@ -257,6 +258,7 @@ export async function GET(request: Request) {
 
     // ── 3. Monthly Revenue ────────────────────────────────────────────────
     const rev = await fetchMonthlyRevenue(holding.stockId);
+    debug[`rev_${holding.stockId}`] = rev;
     if (rev) {
       const revKey = `${holding.stockId}_${rev.period}月營收`;
       if (!seenRevenue.has(revKey)) {
@@ -280,6 +282,7 @@ export async function GET(request: Request) {
 
     // ── 4. Quarterly EPS ──────────────────────────────────────────────────
     const epsData = await fetchLatestEPS(holding.stockId);
+    debug[`eps_${holding.stockId}`] = epsData;
     if (epsData) {
       const epsKey = `${holding.stockId}_${epsData.period}EPS`;
       if (!seenEps.has(epsKey)) {
@@ -305,5 +308,5 @@ export async function GET(request: Request) {
     await sendTelegram(`📋 <b>重大公告通知</b>\n\n${alerts.join('\n\n')}`);
   }
 
-  return NextResponse.json({ processed: holdings.length, alerts: alerts.length });
+  return NextResponse.json({ processed: holdings.length, alerts: alerts.length, debug });
 }
