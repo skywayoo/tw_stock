@@ -216,6 +216,20 @@ export async function getPublicInfos(limit = 30): Promise<PublicInfo[]> {
   }));
 }
 
+export async function getPublicInfosByType(type: PublicInfo['type'], limit = 50): Promise<PublicInfo[]> {
+  const r = await queryDB(DB.PUBLIC_INFO, {
+    filter: { property: 'Type', select: { equals: type } },
+    sorts: [{ property: 'Date', direction: 'descending' }],
+    page_size: limit,
+  });
+  return r.results.map((p) => ({
+    id: pid(p), stockId: getRich(p, 'StockId'), stockName: getTitle(p),
+    date: getDate(p, 'Date'), title: getRich(p, 'Title'),
+    summary: getRich(p, 'Summary'), type: getSelect(p, 'Type') as PublicInfo['type'],
+    isImportant: getBool(p, 'IsImportant'),
+  }));
+}
+
 export async function createPublicInfo(info: Omit<PublicInfo, 'id'>): Promise<string> {
   return createPage(DB.PUBLIC_INFO, {
     Name: { title: [{ text: { content: info.stockName } }] },

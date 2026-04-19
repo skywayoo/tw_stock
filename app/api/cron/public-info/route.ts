@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getHoldings, createPublicInfo, createExDividend, getExDividends } from '@/lib/notion';
+import { getHoldings, createPublicInfo, createExDividend, getExDividends, getPublicInfosByType } from '@/lib/notion';
 import { callGemini } from '@/lib/gemini';
 import { sendTelegram } from '@/lib/telegram';
 
@@ -17,7 +17,6 @@ async function fetchMopsAnnouncements(stockId: string): Promise<{ title: string;
     );
     const html = await res.text();
     const rows: { title: string; date: string; content: string }[] = [];
-    // Parse table rows
     const rowMatches = html.matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/g);
     for (const row of rowMatches) {
       const cells = [...row[0].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(
@@ -35,11 +34,9 @@ async function fetchMopsAnnouncements(stockId: string): Promise<{ title: string;
 }
 
 // Fetch ex-dividend info from TWSE
-// Fetch announced ex-dividends for the current year from TWSE TWT48U
 async function fetchExDividendInfo(stockId: string): Promise<{ exDate: string; cash: number; stock: number }[]> {
   try {
     const year = new Date().getFullYear();
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const res = await fetch(
       `https://www.twse.com.tw/exchangeReport/TWT48U?response=json&strDate=${year}0101&endDate=${year}1231`,
       { cache: 'no-store', headers: { 'Referer': 'https://www.twse.com.tw' } }
@@ -48,22 +45,121 @@ async function fetchExDividendInfo(stockId: string): Promise<{ exDate: string; c
     if (!data.data?.length) return [];
 
     return data.data
-      .filter((row) => row[1]?.trim() === stockId) // filter by stock ID
+      .filter((row) => row[1]?.trim() === stockId)
       .map((row) => {
-        // row[0]: "115年04月20日" → convert to YYYY-MM-DD
         const m = row[0].match(/(\d+)年(\d+)月(\d+)日/);
         if (!m) return null;
         const exDate = `${parseInt(m[1]) + 1911}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
-        const cashRaw = row[7] ?? '';
-        const cash = parseFloat(cashRaw.replace(/<[^>]+>/g, '').trim()) || 0;
+        const cash = parseFloat(row[7]?.replace(/<[^>]+>/g, '').trim() ?? '0') || 0;
         const stock = parseFloat(row[4] ?? '0') || 0;
         return { exDate, cash, stock };
       })
       .filter((d): d is { exDate: string; cash: number; stock: number } =>
-        d !== null && (d.cash > 0 || d.stock > 0) // all this year
+        d !== null && (d.cash > 0 || d.stock > 0)
       );
   } catch {
     return [];
+  }
+}
+
+// Fetch monthly revenue from MOPS nas static file
+// Column order: 公司代號, 公司名稱, 當月營收, 上月營收, 去年當月, 上月增減%, 去年同月增減%, 累計, 去年累計, 累計增減%
+async function fetchMonthlyRevenue(stockId: string): Promise<{
+  revenue: number; yoyChange: number; period: string;
+} | null> {
+  try {
+    // Revenue for month M is released ~10th of month M+1
+    const now = new Date();
+    const targetDate = now.getDate() >= 10
+      ? new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      : new Date(now.getFullYear(), now.getMonth() - 2, 1);
+
+    const rocYear = targetDate.getFullYear() - 1911;
+    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const period = `${targetDate.getFullYear()}-${month}`;
+
+    const url = `https://mops.twse.com.tw/nas/t21/sii/${rocYear}_${month}_0.html`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://mops.twse.com.tw/mops/web/t05st10_q',
+      },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+
+    const buffer = await res.arrayBuffer();
+    // MOPS files are Big5 encoded
+    const html = new TextDecoder('big5').decode(buffer);
+    if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行')) return null;
+
+    for (const rowMatch of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
+      const cells = [...rowMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
+        .map((m) => m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim());
+      if (cells[0] === stockId) {
+        const revenue = parseInt(cells[2]?.replace(/,/g, '') || '0');
+        const yoyChange = parseFloat(cells[6] || '0');
+        return { revenue, yoyChange, period };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Fetch latest quarterly EPS from MOPS
+// Returns EPS for the most recently available quarter
+async function fetchLatestEPS(stockId: string): Promise<{
+  eps: number; period: string;
+} | null> {
+  try {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+
+    // Determine which quarter's report should be available
+    // Q1 (Jan-Mar) published by May 15 → available May+
+    // Q2 (Jan-Jun) published by Aug 14 → available Aug+
+    // Q3 (Jan-Sep) published by Nov 14 → available Nov+
+    // Q4/Annual published by Mar 31 next year → available Apr+
+    let season: number;
+    let reportYear: number;
+    if (month >= 5 && month <= 7) { season = 1; reportYear = year; }
+    else if (month >= 8 && month <= 10) { season = 2; reportYear = year; }
+    else if (month >= 11) { season = 3; reportYear = year; }
+    else if (month >= 4) { season = 4; reportYear = year - 1; }
+    else { season = 3; reportYear = year - 1; } // Jan-Mar → Q3 of last year
+
+    const rocYear = reportYear - 1911;
+    const period = `${reportYear}Q${season}`;
+
+    const res = await fetch('https://mops.twse.com.tw/mops/web/ajax_t163sb04', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://mops.twse.com.tw/mops/web/t163sb04',
+      },
+      body: `encodeURIComponent=1&step=1&TYPEK=sii&code=${stockId}&year=${rocYear}&season=${season}`,
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+
+    const buffer = await res.arrayBuffer();
+    const html = new TextDecoder('big5').decode(buffer);
+    if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行')) return null;
+
+    // Find "基本每股盈餘" row and extract value
+    const epsMatch = html.match(/基本每股盈餘[^<]*<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/);
+    if (epsMatch) {
+      const raw = epsMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim();
+      const eps = parseFloat(raw);
+      if (!isNaN(eps)) return { eps, period };
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -79,10 +175,17 @@ export async function GET(request: Request) {
   const holdings = await getHoldings();
   const existingDividends = await getExDividends();
   const existingDates = new Set(existingDividends.map((e) => `${e.stockId}_${e.exDate}`));
+
+  // Load existing revenue/EPS records for dedup
+  const existingRevenue = await getPublicInfosByType('revenue', 50);
+  const existingEps = await getPublicInfosByType('eps', 50);
+  const seenRevenue = new Set(existingRevenue.map((r) => `${r.stockId}_${r.title}`));
+  const seenEps = new Set(existingEps.map((r) => `${r.stockId}_${r.title}`));
+
   const alerts: string[] = [];
 
   for (const holding of holdings) {
-    // Check MOPS announcements
+    // ── 1. MOPS Announcements ──────────────────────────────────────────────
     const announcements = await fetchMopsAnnouncements(holding.stockId);
     for (const ann of announcements) {
       const prompt = `以下是台灣上市公司 ${holding.stockName}(${holding.stockId}) 的重大訊息：
@@ -112,7 +215,6 @@ export async function GET(request: Request) {
         const type = typeRaw.includes('除息') ? 'ex-dividend'
           : typeRaw.includes('除權') ? 'ex-dividend'
           : typeRaw.includes('增資') ? 'capital-increase'
-          : typeRaw.includes('增資') ? 'rights-offering'
           : 'announcement';
 
         await createPublicInfo({
@@ -131,7 +233,7 @@ export async function GET(request: Request) {
       } catch { /* skip */ }
     }
 
-    // Check ex-dividend (upcoming announced this year)
+    // ── 2. Ex-Dividend ────────────────────────────────────────────────────
     const exDivs = await fetchExDividendInfo(holding.stockId);
     for (const exDiv of exDivs) {
       const key = `${holding.stockId}_${exDiv.exDate}`;
@@ -150,6 +252,49 @@ export async function GET(request: Request) {
           `💰 <b>${holding.stockName}(${holding.stockId})</b> 除息\n` +
           `除息日：${exDiv.exDate}｜現金股利：${exDiv.cash}元`
         );
+      }
+    }
+
+    // ── 3. Monthly Revenue ────────────────────────────────────────────────
+    const rev = await fetchMonthlyRevenue(holding.stockId);
+    if (rev) {
+      const revKey = `${holding.stockId}_${rev.period}月營收`;
+      if (!seenRevenue.has(revKey)) {
+        seenRevenue.add(revKey);
+        const revenueM = (rev.revenue / 1000).toFixed(0); // convert 千元 → 百萬
+        const yoySign = rev.yoyChange >= 0 ? '+' : '';
+        const summary = `${rev.period} 月營收 ${revenueM}百萬，YoY ${yoySign}${rev.yoyChange.toFixed(1)}%`;
+        await createPublicInfo({
+          stockId: holding.stockId,
+          stockName: holding.stockName,
+          date: new Date().toISOString().split('T')[0],
+          title: `${holding.stockId}_${rev.period}月營收`,
+          summary,
+          type: 'revenue',
+          isImportant: Math.abs(rev.yoyChange) >= 10,
+        });
+        const icon = rev.yoyChange >= 10 ? '🚀' : rev.yoyChange <= -10 ? '📉' : '📊';
+        alerts.push(`${icon} <b>${holding.stockName}</b> ${summary}`);
+      }
+    }
+
+    // ── 4. Quarterly EPS ──────────────────────────────────────────────────
+    const epsData = await fetchLatestEPS(holding.stockId);
+    if (epsData) {
+      const epsKey = `${holding.stockId}_${epsData.period}EPS`;
+      if (!seenEps.has(epsKey)) {
+        seenEps.add(epsKey);
+        const summary = `${epsData.period} EPS ${epsData.eps.toFixed(2)} 元`;
+        await createPublicInfo({
+          stockId: holding.stockId,
+          stockName: holding.stockName,
+          date: new Date().toISOString().split('T')[0],
+          title: `${holding.stockId}_${epsData.period}EPS`,
+          summary,
+          type: 'eps',
+          isImportant: epsData.eps > 0,
+        });
+        alerts.push(`📑 <b>${holding.stockName}</b> ${summary}`);
       }
     }
 

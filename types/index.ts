@@ -52,7 +52,7 @@ export interface NewsDigest {
 }
 
 // ============ Public Info ============
-export type PublicInfoType = 'ex-dividend' | 'rights-offering' | 'capital-increase' | 'announcement' | 'other';
+export type PublicInfoType = 'ex-dividend' | 'rights-offering' | 'capital-increase' | 'announcement' | 'revenue' | 'eps' | 'other';
 
 export interface PublicInfo {
   id: string;
