@@ -63,7 +63,8 @@ async function fetchExDividendInfo(stockId: string): Promise<{ exDate: string; c
 }
 
 // Fetch monthly revenue from MOPS nas static file
-// Column order: 公司代號, 公司名稱, 當月營收, 上月營收, 去年當月, 上月增減%, 去年同月增減%, 累計, 去年累計, 累計增減%
+// Fetch monthly revenue via MOPS ajax_t05st10 (POST, same as announcements - not IP-blocked)
+// Columns: 公司代號, 公司名稱, 當月營收, 上月營收, 去年當月, 上月增減%, 去年同月增減%, 累計, 去年累計, 累計增減%
 async function fetchMonthlyRevenue(stockId: string): Promise<{
   revenue: number; yoyChange: number; period: string; _debug?: string;
 } | null> {
@@ -78,18 +79,23 @@ async function fetchMonthlyRevenue(stockId: string): Promise<{
     const period = `${targetDate.getFullYear()}-${month}`;
 
     const reqHeaders = {
+      'Content-Type': 'application/x-www-form-urlencoded',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       'Referer': 'https://mops.twse.com.tw/mops/web/t05st10_q',
     };
     const debugInfo: string[] = [];
-    for (const market of ['sii', 'otc']) {
-      const url = `https://mops.twse.com.tw/nas/t21/${market}/${rocYear}_${month}_0.html`;
-      const res = await fetch(url, { headers: reqHeaders, cache: 'no-store' });
-      if (!res.ok) { debugInfo.push(`${market}:${res.status}`); continue; }
+    for (const typek of ['sii', 'otc']) {
+      const res = await fetch('https://mops.twse.com.tw/mops/web/ajax_t05st10_ifrs', {
+        method: 'POST',
+        headers: reqHeaders,
+        body: `encodeURIComponent=1&step=1&TYPEK=${typek}&code=${stockId}&year=${rocYear}&month=${month}`,
+        cache: 'no-store',
+      });
+      if (!res.ok) { debugInfo.push(`${typek}:http_${res.status}`); continue; }
       const buffer = await res.arrayBuffer();
       const html = new TextDecoder('big5').decode(buffer);
       if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行')) {
-        debugInfo.push(`${market}:blocked`); continue;
+        debugInfo.push(`${typek}:blocked`); continue;
       }
       for (const rowMatch of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
         const cells = [...rowMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
@@ -100,7 +106,7 @@ async function fetchMonthlyRevenue(stockId: string): Promise<{
           return { revenue, yoyChange, period };
         }
       }
-      debugInfo.push(`${market}:not_found(len=${html.length})`);
+      debugInfo.push(`${typek}:not_found(len=${html.length})`);
     }
     return { revenue: 0, yoyChange: 0, period, _debug: debugInfo.join(',') };
   } catch (e) {
