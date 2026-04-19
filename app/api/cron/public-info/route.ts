@@ -77,89 +77,90 @@ async function fetchMonthlyRevenue(stockId: string): Promise<{
     const month = String(targetDate.getMonth() + 1).padStart(2, '0');
     const period = `${targetDate.getFullYear()}-${month}`;
 
-    const url = `https://mops.twse.com.tw/nas/t21/sii/${rocYear}_${month}_0.html`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://mops.twse.com.tw/mops/web/t05st10_q',
-      },
-      cache: 'no-store',
-    });
-    if (!res.ok) return { revenue: 0, yoyChange: 0, period, _debug: `http_${res.status}_url_${url}` };
-
-    const buffer = await res.arrayBuffer();
-    const html = new TextDecoder('big5').decode(buffer);
-    if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行'))
-      return { revenue: 0, yoyChange: 0, period, _debug: `blocked_url_${url}` };
-
-    for (const rowMatch of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
-      const cells = [...rowMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
-        .map((m) => m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim());
-      if (cells[0] === stockId) {
-        const revenue = parseInt(cells[2]?.replace(/,/g, '') || '0');
-        const yoyChange = parseFloat(cells[6] || '0');
-        return { revenue, yoyChange, period };
+    const reqHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://mops.twse.com.tw/mops/web/t05st10_q',
+    };
+    const debugInfo: string[] = [];
+    for (const market of ['sii', 'otc']) {
+      const url = `https://mops.twse.com.tw/nas/t21/${market}/${rocYear}_${month}_0.html`;
+      const res = await fetch(url, { headers: reqHeaders, cache: 'no-store' });
+      if (!res.ok) { debugInfo.push(`${market}:${res.status}`); continue; }
+      const buffer = await res.arrayBuffer();
+      const html = new TextDecoder('big5').decode(buffer);
+      if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行')) {
+        debugInfo.push(`${market}:blocked`); continue;
       }
+      for (const rowMatch of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
+        const cells = [...rowMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
+          .map((m) => m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim());
+        if (cells[0] === stockId) {
+          const revenue = parseInt(cells[2]?.replace(/,/g, '') || '0');
+          const yoyChange = parseFloat(cells[6] || '0');
+          return { revenue, yoyChange, period };
+        }
+      }
+      debugInfo.push(`${market}:not_found(len=${html.length})`);
     }
-    return { revenue: 0, yoyChange: 0, period, _debug: `not_found_in_html_len_${html.length}` };
+    return { revenue: 0, yoyChange: 0, period, _debug: debugInfo.join(',') };
   } catch (e) {
     return { revenue: 0, yoyChange: 0, period: 'err', _debug: String(e) };
   }
 }
 
-// Fetch latest quarterly EPS from MOPS
-// Returns EPS for the most recently available quarter
+// Fetch latest quarterly EPS from MOPS (tries both sii and otc market types)
 async function fetchLatestEPS(stockId: string): Promise<{
-  eps: number; period: string;
+  eps: number; period: string; _debug?: string;
 } | null> {
   try {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
 
-    // Determine which quarter's report should be available
-    // Q1 (Jan-Mar) published by May 15 → available May+
-    // Q2 (Jan-Jun) published by Aug 14 → available Aug+
-    // Q3 (Jan-Sep) published by Nov 14 → available Nov+
-    // Q4/Annual published by Mar 31 next year → available Apr+
-    let season: number;
+    // Q4/Annual published by Mar 31 → available Apr+
+    // Q1 published by May 15 → available May+
+    // Q2 published by Aug 14 → available Aug+
+    // Q3 published by Nov 14 → available Nov+
+    let quarter: number;
     let reportYear: number;
-    if (month >= 5 && month <= 7) { season = 1; reportYear = year; }
-    else if (month >= 8 && month <= 10) { season = 2; reportYear = year; }
-    else if (month >= 11) { season = 3; reportYear = year; }
-    else if (month >= 4) { season = 4; reportYear = year - 1; }
-    else { season = 3; reportYear = year - 1; } // Jan-Mar → Q3 of last year
+    if (month >= 5 && month <= 7) { quarter = 1; reportYear = year; }
+    else if (month >= 8 && month <= 10) { quarter = 2; reportYear = year; }
+    else if (month >= 11) { quarter = 3; reportYear = year; }
+    else if (month >= 4) { quarter = 4; reportYear = year - 1; }
+    else { quarter = 3; reportYear = year - 1; }
 
     const rocYear = reportYear - 1911;
-    const period = `${reportYear}Q${season}`;
+    const period = `${reportYear}Q${quarter}`;
+    const debugInfo: string[] = [];
 
-    const res = await fetch('https://mops.twse.com.tw/mops/web/ajax_t163sb04', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://mops.twse.com.tw/mops/web/t163sb04',
-      },
-      body: `encodeURIComponent=1&step=1&TYPEK=sii&code=${stockId}&year=${rocYear}&season=${season}`,
-      cache: 'no-store',
-    });
-    if (!res.ok) return { eps: 0, period, _debug: `http_${res.status}` } as never;
-
-    const buffer = await res.arrayBuffer();
-    const html = new TextDecoder('big5').decode(buffer);
-    if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行'))
-      return { eps: 0, period, _debug: 'blocked' } as never;
-
-    // Find "基本每股盈餘" row and extract value
-    const epsMatch = html.match(/基本每股盈餘[^<]*<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/);
-    if (epsMatch) {
-      const raw = epsMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim();
-      const eps = parseFloat(raw);
-      if (!isNaN(eps)) return { eps, period };
+    for (const typek of ['sii', 'otc']) {
+      const res = await fetch('https://mops.twse.com.tw/mops/web/ajax_t163sb04', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://mops.twse.com.tw/mops/web/t163sb04',
+        },
+        body: `encodeURIComponent=1&step=1&TYPEK=${typek}&code=${stockId}&year=${rocYear}&season=${quarter}`,
+        cache: 'no-store',
+      });
+      if (!res.ok) { debugInfo.push(`${typek}:http_${res.status}`); continue; }
+      const buffer = await res.arrayBuffer();
+      const html = new TextDecoder('big5').decode(buffer);
+      if (html.includes('PAGE CANNOT BE ACCESSED') || html.includes('頁面無法執行')) {
+        debugInfo.push(`${typek}:blocked`); continue;
+      }
+      const epsMatch = html.match(/基本每股盈餘[^<]*<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/);
+      if (epsMatch) {
+        const raw = epsMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim();
+        const eps = parseFloat(raw);
+        if (!isNaN(eps)) return { eps, period };
+      }
+      debugInfo.push(`${typek}:no_match(len=${html.length})`);
     }
-    return { eps: 0, period, _debug: `no_match_html_len_${html.length}` } as never;
+    return { eps: 0, period, _debug: debugInfo.join(',') };
   } catch (e) {
-    return { eps: 0, period: 'err', _debug: String(e) } as never;
+    return { eps: 0, period: 'err', _debug: String(e) };
   }
 }
 
