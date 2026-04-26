@@ -251,6 +251,48 @@ export async function createPublicInfo(info: Omit<PublicInfo, 'id'>): Promise<st
   });
 }
 
+// ============ SBL Snapshot (persistent prev for delta calc) ============
+const SBL_TITLE = 'sbl_prev_snapshot';
+
+export async function getSBLPrevSnapshot(): Promise<Record<string, { shares9B00: number; total: number }> | null> {
+  try {
+    const r = await queryDB(DB.PUBLIC_INFO, {
+      filter: { property: 'Title', rich_text: { equals: SBL_TITLE } },
+      page_size: 1,
+    });
+    const page = r.results?.[0];
+    if (!page) return null;
+    const json = getRich(page, 'Summary');
+    return json ? JSON.parse(json) : null;
+  } catch { return null; }
+}
+
+export async function saveSBLPrevSnapshot(data: Record<string, { shares9B00: number; total: number }>): Promise<void> {
+  const json = JSON.stringify(data).slice(0, 2000);
+  try {
+    const r = await queryDB(DB.PUBLIC_INFO, {
+      filter: { property: 'Title', rich_text: { equals: SBL_TITLE } },
+      page_size: 1,
+    });
+    if (r.results?.[0]) {
+      await updatePage(pid(r.results[0]), { properties: {
+        Summary: { rich_text: [{ text: { content: json } }] },
+        Date: { date: { start: new Date().toISOString().split('T')[0] } },
+      }});
+    } else {
+      await createPage(DB.PUBLIC_INFO, {
+        Name: { title: [{ text: { content: 'SBL Snapshot' } }] },
+        StockId: { rich_text: [{ text: { content: 'system' } }] },
+        Date: { date: { start: new Date().toISOString().split('T')[0] } },
+        Title: { rich_text: [{ text: { content: SBL_TITLE } }] },
+        Summary: { rich_text: [{ text: { content: json } }] },
+        Type: { select: { name: 'other' } },
+        IsImportant: { checkbox: false },
+      });
+    }
+  } catch { /* best effort */ }
+}
+
 // ============ Daily Report ============
 export async function getDailyReports(limit = 30): Promise<DailyReport[]> {
   const r = await queryDB(DB.DAILY_REPORT, {
@@ -284,19 +326,31 @@ export async function createDailyReport(report: Omit<DailyReport, 'id'>): Promis
 // ============ Realized P&L ============
 export async function getRealizedPnls(): Promise<RealizedPnl[]> {
   const r = await queryDB(DB.REALIZED, { sorts: [{ property: 'SellDate', direction: 'descending' }] });
-  return r.results.map((p) => ({
-    id: pid(p), stockId: getRich(p, 'StockId'), stockName: getTitle(p),
-    shares: getNum(p, 'Shares'), buyPrice: getNum(p, 'BuyPrice'),
-    sellPrice: getNum(p, 'SellPrice'), sellDate: getDate(p, 'SellDate'),
-    dividendDeducted: getNum(p, 'DividendDeducted'), lendingInterest: getNum(p, 'LendingInterest'),
-    notes: getRich(p, 'Notes') || undefined,
-  }));
+  return r.results.map((p) => {
+    const typeStr = getSelect(p, 'Type');
+    return {
+      id: pid(p),
+      type: (typeStr === 'lending_return' ? 'lending_return' : 'sale') as RealizedPnl['type'],
+      stockId: getRich(p, 'StockId'), stockName: getTitle(p),
+      shares: getNum(p, 'Shares'), buyPrice: getNum(p, 'BuyPrice'),
+      sellPrice: getNum(p, 'SellPrice'), sellDate: getDate(p, 'SellDate'),
+      dividendDeducted: getNum(p, 'DividendDeducted'), lendingInterest: getNum(p, 'LendingInterest'),
+      notes: getRich(p, 'Notes') || undefined,
+      startDate: getDate(p, 'StartDate') || undefined,
+      annualRate: getNum(p, 'AnnualRate') || undefined,
+      grossInterest: getNum(p, 'GrossInterest') || undefined,
+      brokerFeeAmount: getNum(p, 'BrokerFeeAmount') || undefined,
+      withholdingTax: getNum(p, 'WithholdingTax') || undefined,
+      netInterest: getNum(p, 'NetInterest') || undefined,
+    };
+  });
 }
 
 export async function createRealizedPnl(r: Omit<RealizedPnl, 'id'>): Promise<string> {
-  return createPage(DB.REALIZED, {
+  const props: Record<string, unknown> = {
     Name: { title: [{ text: { content: r.stockName } }] },
     StockId: { rich_text: [{ text: { content: r.stockId } }] },
+    Type: { select: { name: r.type || 'sale' } },
     Shares: { number: r.shares },
     BuyPrice: { number: r.buyPrice },
     SellPrice: { number: r.sellPrice },
@@ -304,5 +358,12 @@ export async function createRealizedPnl(r: Omit<RealizedPnl, 'id'>): Promise<str
     DividendDeducted: { number: r.dividendDeducted },
     LendingInterest: { number: r.lendingInterest },
     Notes: { rich_text: [{ text: { content: r.notes || '' } }] },
-  });
+  };
+  if (r.startDate) props.StartDate = { date: { start: r.startDate } };
+  if (r.annualRate != null) props.AnnualRate = { number: r.annualRate };
+  if (r.grossInterest != null) props.GrossInterest = { number: r.grossInterest };
+  if (r.brokerFeeAmount != null) props.BrokerFeeAmount = { number: r.brokerFeeAmount };
+  if (r.withholdingTax != null) props.WithholdingTax = { number: r.withholdingTax };
+  if (r.netInterest != null) props.NetInterest = { number: r.netInterest };
+  return createPage(DB.REALIZED, props);
 }

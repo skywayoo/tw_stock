@@ -93,15 +93,26 @@ export interface HoldingSnapshot {
 }
 
 // ============ Realized P&L ============
+export type RealizedType = 'sale' | 'lending_return';
+
 export interface RealizedPnl {
   id: string;
+  type: RealizedType;        // 'sale' (default) or 'lending_return'
   stockId: string;
   stockName: string;
-  shares: number;        // 張數
-  buyPrice: number;      // 買入均價(元/股)
-  sellPrice: number;     // 賣出均價(元/股)
-  sellDate: string;      // ISO date
-  dividendDeducted: number; // 已扣除股利(元/股)
-  lendingInterest: number;  // 借券利息收入(元，總額)
+  shares: number;            // for sale: 張數; for lending_return: 還券股數
+  buyPrice: number;          // sale only (0 for lending_return)
+  sellPrice: number;         // sale only (0 for lending_return)
+  sellDate: string;          // sale: 賣出日; lending_return: 還券日
+  dividendDeducted: number;  // sale only
+  lendingInterest: number;   // sale only — extra side income
   notes?: string;
+
+  // lending_return only
+  startDate?: string;         // 出借日
+  annualRate?: number;        // 年利率 %
+  grossInterest?: number;     // 借券費（毛利息）
+  brokerFeeAmount?: number;   // 借貸手續費
+  withholdingTax?: number;    // 代扣稅款
+  netInterest?: number;       // 淨收入（應收金額）
 }
