@@ -140,7 +140,12 @@ export async function getLendings(): Promise<Lending[]> {
     sharesLent: getNum(p, 'SharesLent'), startDate: getDate(p, 'StartDate'),
     endDate: getDate(p, 'EndDate') || undefined, annualRate: getNum(p, 'AnnualRate'),
     brokerFee: getNum(p, 'BrokerFee'),
-    accruedInterest: getNum(p, 'AccruedInterest'), isActive: getBool(p, 'IsActive'),
+    accruedInterest: getNum(p, 'AccruedInterest'),
+    grossInterest: getNum(p, 'GrossInterest') || undefined,
+    brokerFeeAmount: getNum(p, 'BrokerFeeAmount') || undefined,
+    withholdingTax: getNum(p, 'WithholdingTax') || undefined,
+    netInterest: getNum(p, 'NetInterest') || undefined,
+    isActive: getBool(p, 'IsActive'),
   }));
 }
 

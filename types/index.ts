@@ -33,6 +33,10 @@ export interface Lending {
   annualRate: number;    // 年利率 %
   brokerFee: number;     // 券商手續費 %
   accruedInterest: number; // 累積利息(元)
+  grossInterest?: number;       // 借券費(毛利息)
+  brokerFeeAmount?: number;     // 借貸手續費 ($)
+  withholdingTax?: number;      // 代扣稅款
+  netInterest?: number;         // 淨收入 (應收金額)
   isActive: boolean;
 }
 
