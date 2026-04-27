@@ -110,6 +110,17 @@ export async function GET(request: Request) {
   const seenRevenue = new Set(existingRevenue.map((r) => r.title));
   const seenEps = new Set(existingEps.map((r) => r.title));
 
+  // Load existing announcements for dedup (last 100, keyed by stockId+title)
+  const existingAnnouncements = await getPublicInfosByType('announcement', 100);
+  const existingDividendAnnos = await getPublicInfosByType('ex-dividend', 50);
+  const existingCapital = await getPublicInfosByType('capital-increase', 50);
+  const seenAnnouncements = new Set(
+    [...existingAnnouncements, ...existingDividendAnnos, ...existingCapital]
+      .map((a) => `${a.stockId}_${a.title}`)
+  );
+
+  const stripMarkdown = (s: string) => s.replace(/\*+/g, '').replace(/^#+\s*/gm, '').replace(/`+/g, '').trim();
+
   // Fetch TWSE OpenAPI datasets once (covers listed stocks, not OTC)
   const twseHeaders = { 'Referer': 'https://www.twse.com.tw' };
   let revenueDataset: Record<string, string>[] = [];
@@ -129,19 +140,23 @@ export async function GET(request: Request) {
     // ── 1. MOPS Announcements ──────────────────────────────────────────────
     const announcements = await fetchMopsAnnouncements(holding.stockId);
     for (const ann of announcements) {
+      const annKey = `${holding.stockId}_${ann.title}`;
+      if (seenAnnouncements.has(annKey)) continue;
+      seenAnnouncements.add(annKey);
+
       const prompt = `以下是台灣上市公司 ${holding.stockName}(${holding.stockId}) 的重大訊息：
 標題：${ann.title}
 內容：${ann.content}
 
 請判斷：
 1. 類型：除息/除權/增資/一般公告/其他
-2. 是否重要（影響股價）：是/否
-3. 用15字以內摘要
+2. 是否重要（影響股價或對投資人決策有意義）：是/否
+3. 用 30-50 字繁體中文完整摘要（不要只寫關鍵字，要寫成句子）
 
-格式：
+純文字格式（不要 markdown 符號）：
 類型：[類型]
 重要：[是/否]
-摘要：[摘要]`;
+摘要：[30-50 字句子]`;
 
       try {
         const reply = await callGemini(apiKey, prompt);
@@ -151,7 +166,8 @@ export async function GET(request: Request) {
 
         const typeRaw = typeMatch?.[1]?.trim() ?? '其他';
         const isImportant = importantMatch?.[1]?.includes('是') ?? false;
-        const summary = summaryMatch?.[1]?.trim() ?? ann.title;
+        let summary = stripMarkdown(summaryMatch?.[1]?.trim() ?? '');
+        if (summary.length < 8) summary = ann.title;
 
         const type = typeRaw.includes('除息') ? 'ex-dividend'
           : typeRaw.includes('除權') ? 'ex-dividend'
@@ -169,7 +185,11 @@ export async function GET(request: Request) {
         });
 
         if (isImportant) {
-          alerts.push(`📢 <b>${holding.stockName}</b>：${summary}`);
+          alerts.push(
+            `📢 <b>${holding.stockName}(${holding.stockId})</b>\n` +
+            `${ann.title}\n` +
+            `💭 ${summary}`
+          );
         }
       } catch { /* skip */ }
     }

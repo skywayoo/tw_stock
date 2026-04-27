@@ -90,7 +90,12 @@ ${snapshotText}
 未實現損益：${Math.round(totalValue - totalCost).toLocaleString()} 元（${Math.round((totalValue - totalCost) / totalCost * 100)}%）
 今日損益：${dayChange >= 0 ? '+' : ''}${Math.round(dayChange).toLocaleString()} 元（${dayChange >= 0 ? '+' : ''}${dayChangePct}%）
 
-請用3–4句話簡短總結今日表現，並給出明日注意事項。繁體中文，簡潔有力。`;
+請用 3–4 句話總結今日表現並提示明日注意事項。
+規則：
+- 純繁體中文
+- 不要使用任何 markdown 符號（不要 **、*、#、-、\`）
+- 直接寫整段文字，不要分點不要列表
+- 簡潔有力`;
 
   let content = '';
   try {
@@ -98,6 +103,8 @@ ${snapshotText}
   } catch {
     content = `今日總市值 ${Math.round(totalValue).toLocaleString()} 元，${dayChange >= 0 ? '上漲' : '下跌'} ${Math.abs(Math.round(dayChange)).toLocaleString()} 元。`;
   }
+  // Strip any markdown the model may still emit
+  content = content.replace(/\*+/g, '').replace(/^#+\s*/gm, '').replace(/`+/g, '').replace(/^-\s+/gm, '').trim();
 
   await createDailyReport({ date: today, totalValue, totalCost, dayChange, dayChangePct, content, holdingSnapshots: snapshots });
 

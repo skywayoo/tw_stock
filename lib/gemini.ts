@@ -1,15 +1,8 @@
+// Real, currently-available Gemini/Gemma models. Tried in order on error.
 const MODELS = [
-  'gemma-4-31b-it',
-  'gemma-4-26b-a4b-it',
-  'gemini-3.1-flash-lite-preview',
-  'gemini-3-flash-preview',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
 ];
-
-interface GeminiPart {
-  text: string;
-}
 
 export async function callGemini(apiKey: string, prompt: string): Promise<string> {
   let lastError = '';

@@ -210,15 +210,20 @@ export async function createNews(n: Omit<NewsDigest, 'id'>): Promise<string> {
 
 // ============ Public Info ============
 export async function getPublicInfos(limit = 30): Promise<PublicInfo[]> {
+  // Fetch a few extra in case the SBL snapshot row shows up at the top
   const r = await queryDB(DB.PUBLIC_INFO, {
-    sorts: [{ property: 'Date', direction: 'descending' }], page_size: limit,
+    sorts: [{ property: 'Date', direction: 'descending' }], page_size: limit + 5,
   });
-  return r.results.map((p) => ({
-    id: pid(p), stockId: getRich(p, 'StockId'), stockName: getTitle(p),
-    date: getDate(p, 'Date'), title: getRich(p, 'Title'),
-    summary: getRich(p, 'Summary'), type: getSelect(p, 'Type') as PublicInfo['type'],
-    isImportant: getBool(p, 'IsImportant'),
-  }));
+  return r.results
+    .map((p) => ({
+      id: pid(p), stockId: getRich(p, 'StockId'), stockName: getTitle(p),
+      date: getDate(p, 'Date'), title: getRich(p, 'Title'),
+      summary: getRich(p, 'Summary'), type: getSelect(p, 'Type') as PublicInfo['type'],
+      isImportant: getBool(p, 'IsImportant'),
+    }))
+    // Hide internal SBL snapshot row from UI
+    .filter((p) => p.title !== 'sbl_prev_snapshot' && p.stockId !== 'system')
+    .slice(0, limit);
 }
 
 export async function getPublicInfosByType(type: PublicInfo['type'], limit = 50): Promise<PublicInfo[]> {

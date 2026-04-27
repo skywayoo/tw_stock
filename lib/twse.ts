@@ -16,28 +16,34 @@ export interface StockPrice {
   limitDown: boolean;
 }
 
+// TWSE realtime endpoint requires a Referer + UA, otherwise it 200s with empty msgArray.
+const MIS_HEADERS = {
+  'Referer': 'https://mis.twse.com.tw/stock/index.jsp',
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+};
+
 // TWSE real-time API
 export async function getStockPrice(stockId: string): Promise<StockPrice | null> {
   try {
     // Try listed stocks (上市) first
     const res = await fetch(
       `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${stockId}.tw&json=1&delay=0`,
-      { cache: 'no-store' }
+      { cache: 'no-store', headers: MIS_HEADERS }
     );
     const data = await res.json() as { msgArray?: Record<string, string>[] };
     const item = data.msgArray?.[0];
-    if (item && item.z && item.z !== '-') {
+    if (item && (item.z !== '-' || item.y)) {
       return parseStockInfo(stockId, item);
     }
 
     // Try OTC (上櫃)
     const res2 = await fetch(
       `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_${stockId}.tw&json=1&delay=0`,
-      { cache: 'no-store' }
+      { cache: 'no-store', headers: MIS_HEADERS }
     );
     const data2 = await res2.json() as { msgArray?: Record<string, string>[] };
     const item2 = data2.msgArray?.[0];
-    if (item2 && item2.z && item2.z !== '-') {
+    if (item2 && (item2.z !== '-' || item2.y)) {
       return parseStockInfo(stockId, item2);
     }
 
