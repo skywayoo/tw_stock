@@ -1,7 +1,5 @@
-// Real, currently-available Gemini/Gemma models. Tried in order on error.
 const MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
+  'gemma-4-31b-it',
 ];
 
 export async function callGemini(apiKey: string, prompt: string): Promise<string> {
