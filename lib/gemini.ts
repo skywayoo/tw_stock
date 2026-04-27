@@ -1,5 +1,8 @@
+// Gemma fallback chain — try the strongest first, fall back when quota is exhausted.
 const MODELS = [
   'gemma-4-31b-it',
+  'gemma-4-26b-a4b-it',
+  'gemma-3-27b-it',
 ];
 
 export async function callGemini(apiKey: string, prompt: string): Promise<string> {
