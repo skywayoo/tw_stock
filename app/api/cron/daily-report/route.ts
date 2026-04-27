@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getHoldings, getLendings, createDailyReport, getDailyReports } from '@/lib/notion';
+import { getHoldings, getLendings, createDailyReport } from '@/lib/notion';
 import { getMultipleStockPrices } from '@/lib/twse';
 import { callGemini } from '@/lib/gemini';
 import { sendTelegram } from '@/lib/telegram';
@@ -61,11 +61,11 @@ export async function GET(request: Request) {
     totalCost += cost;
   }
 
-  // Get yesterday's report for comparison
-  const prevReports = await getDailyReports(1);
-  const prevValue = prevReports[0]?.totalValue ?? totalValue;
-  const dayChange = totalValue - prevValue;
-  const dayChangePct = prevValue > 0 ? Math.round((dayChange / prevValue) * 10000) / 100 : 0;
+  // Day change = Σ per-stock (close - prev close) × shares — never compare against the
+  // previous DailyReport row, because a same-day rerun would treat itself as "yesterday".
+  const dayChange = snapshots.reduce((s, sn) => s + sn.change * sn.shares * 1000, 0);
+  const prevTotalValue = snapshots.reduce((s, sn) => s + sn.prevClosePrice * sn.shares * 1000, 0);
+  const dayChangePct = prevTotalValue > 0 ? Math.round((dayChange / prevTotalValue) * 10000) / 100 : 0;
 
   // Generate AI summary
   const snapshotText = snapshots.map(

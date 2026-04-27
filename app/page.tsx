@@ -1,9 +1,8 @@
 'use client';
-import { useEffect } from 'react';
 import Link from 'next/link';
 import Header from '@/components/layout/Header';
-import { useHoldings, useStockPrices, useDailyReports } from '@/lib/hooks';
-import { TrendingUp, TrendingDown, Plus, RefreshCw } from 'lucide-react';
+import { useHoldings, useStockPrices } from '@/lib/hooks';
+import { Plus, RefreshCw } from 'lucide-react';
 
 function fmt(n: number) { return n.toLocaleString('zh-TW', { maximumFractionDigits: 0 }); }
 function pct(n: number) { return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`; }
@@ -12,23 +11,32 @@ export default function DashboardPage() {
   const { holdings, isLoading } = useHoldings();
   const stockIds = holdings.map((h) => h.stockId);
   const { prices, mutate: refreshPrices } = useStockPrices(stockIds);
-  const { reports } = useDailyReports();
-
-  const latestReport = reports[0];
 
   let totalValue = 0;
   let totalCost = 0;
+  let dayChange = 0;
+  let prevTotalValue = 0;
+  let hasAnyPrice = false;
   const holdingRows = holdings.map((h) => {
     const p = prices[h.stockId];
     const value = (p?.price ?? h.avgCost) * h.shares * 1000;
     const cost = h.avgCost * h.shares * 1000;
     totalValue += value;
     totalCost += cost;
+    if (p) {
+      hasAnyPrice = true;
+      const sharesCount = h.shares * 1000;
+      dayChange += (p.change ?? 0) * sharesCount;
+      const prevClose = p.price - (p.change ?? 0);
+      prevTotalValue += prevClose * sharesCount;
+    }
     return { ...h, price: p?.price, change: p?.change, changePct: p?.changePct, isTrading: p?.isTrading, limitUp: p?.limitUp, limitDown: p?.limitDown, value, cost };
   });
 
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+  const dayChangePct = prevTotalValue > 0 ? (dayChange / prevTotalValue) * 100 : 0;
+  const today = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
 
   return (
     <div>
@@ -58,11 +66,11 @@ export default function DashboardPage() {
               </p>
             </div>
           </div>
-          {latestReport && (
+          {hasAnyPrice && (
             <div className="mt-3 border-t border-gray-800 pt-3">
-              <p className="text-xs text-gray-500">今日 {latestReport.date}</p>
-              <p className={`text-sm font-medium ${latestReport.dayChange >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                {latestReport.dayChange >= 0 ? '▲' : '▼'} {fmt(Math.abs(latestReport.dayChange))} ({pct(latestReport.dayChangePct)})
+              <p className="text-xs text-gray-500">今日 {today}</p>
+              <p className={`text-sm font-medium ${dayChange >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                {dayChange >= 0 ? '▲' : '▼'} {fmt(Math.abs(dayChange))} ({pct(dayChangePct)})
               </p>
             </div>
           )}
