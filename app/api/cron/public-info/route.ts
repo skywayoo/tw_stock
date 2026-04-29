@@ -6,31 +6,33 @@ import { sendTelegram } from '@/lib/telegram';
 export const dynamic = 'force-dynamic';
 
 // Fetch major announcements from MOPS (公開資訊觀測站)
+// Tries 上市 (sii) then 上櫃 (otc) — without this, OTC stocks like 3257 虹冠電 returned 0 rows.
 async function fetchMopsAnnouncements(stockId: string): Promise<{ title: string; date: string; content: string }[]> {
-  try {
-    const res = await fetch(
-      `https://mops.twse.com.tw/mops/web/ajax_t05st01?encodeURIComponent=1&step=1&TYPEK=sii&code=${stockId}&firstin=1`,
-      {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        cache: 'no-store',
-      }
-    );
-    const html = await res.text();
-    const rows: { title: string; date: string; content: string }[] = [];
-    const rowMatches = html.matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/g);
-    for (const row of rowMatches) {
-      const cells = [...row[0].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(
-        (m) => m[1].replace(/<[^>]+>/g, '').trim()
+  for (const market of ['sii', 'otc']) {
+    try {
+      const res = await fetch(
+        `https://mops.twse.com.tw/mops/web/ajax_t05st01?encodeURIComponent=1&step=1&TYPEK=${market}&code=${stockId}&firstin=1`,
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          cache: 'no-store',
+        }
       );
-      if (cells.length >= 3 && cells[0].match(/\d{3}\/\d{2}\/\d{2}/)) {
-        rows.push({ date: cells[0], title: cells[2] || cells[1], content: cells[3] || '' });
-        if (rows.length >= 5) break;
+      const html = await res.text();
+      const rows: { title: string; date: string; content: string }[] = [];
+      const rowMatches = html.matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/g);
+      for (const row of rowMatches) {
+        const cells = [...row[0].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(
+          (m) => m[1].replace(/<[^>]+>/g, '').trim()
+        );
+        if (cells.length >= 3 && cells[0].match(/\d{3}\/\d{2}\/\d{2}/)) {
+          rows.push({ date: cells[0], title: cells[2] || cells[1], content: cells[3] || '' });
+          if (rows.length >= 5) break;
+        }
       }
-    }
-    return rows;
-  } catch {
-    return [];
+      if (rows.length > 0) return rows;
+    } catch { /* try next market */ }
   }
+  return [];
 }
 
 // Fetch ex-dividend info from TWSE
@@ -121,17 +123,22 @@ export async function GET(request: Request) {
 
   const stripMarkdown = (s: string) => s.replace(/\*+/g, '').replace(/^#+\s*/gm, '').replace(/`+/g, '').trim();
 
-  // Fetch TWSE OpenAPI datasets once (covers listed stocks, not OTC)
-  const twseHeaders = { 'Referer': 'https://www.twse.com.tw' };
+  // Fetch TWSE + TPEx OpenAPI datasets once. _L = 上市 (TWSE), _O = 上櫃 (TPEx).
+  // Without the OTC version, stocks like 3257 虹冠電 silently disappeared from營收/EPS notifications.
+  const headers = { 'Referer': 'https://www.twse.com.tw' };
   let revenueDataset: Record<string, string>[] = [];
   let epsDataset: Record<string, string>[] = [];
   try {
-    const [revRes, epsRes] = await Promise.all([
-      fetch('https://openapi.twse.com.tw/v1/opendata/t187ap05_L', { cache: 'no-store', headers: twseHeaders }),
-      fetch('https://openapi.twse.com.tw/v1/opendata/t187ap06_L_ci', { cache: 'no-store', headers: twseHeaders }),
+    const [revL, revO, epsL, epsO] = await Promise.all([
+      fetch('https://openapi.twse.com.tw/v1/opendata/t187ap05_L', { cache: 'no-store', headers }),
+      fetch('https://openapi.twse.com.tw/v1/opendata/t187ap05_O', { cache: 'no-store', headers }),
+      fetch('https://openapi.twse.com.tw/v1/opendata/t187ap06_L_ci', { cache: 'no-store', headers }),
+      fetch('https://openapi.twse.com.tw/v1/opendata/t187ap06_O_ci', { cache: 'no-store', headers }),
     ]);
-    if (revRes.ok) revenueDataset = await revRes.json() as Record<string, string>[];
-    if (epsRes.ok) epsDataset = await epsRes.json() as Record<string, string>[];
+    if (revL.ok) revenueDataset = revenueDataset.concat(await revL.json() as Record<string, string>[]);
+    if (revO.ok) revenueDataset = revenueDataset.concat(await revO.json() as Record<string, string>[]);
+    if (epsL.ok) epsDataset = epsDataset.concat(await epsL.json() as Record<string, string>[]);
+    if (epsO.ok) epsDataset = epsDataset.concat(await epsO.json() as Record<string, string>[]);
   } catch { /* datasets stay empty, stocks will show _debug: not_in_listed_dataset */ }
 
   const alerts: string[] = [];
