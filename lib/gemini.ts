@@ -10,10 +10,11 @@ export async function callGemini(apiKey: string, prompt: string): Promise<string
   for (const model of MODELS) {
     const body = {
       contents: [{ parts: [{ text: prompt }] }],
+      // Gemma 4 is a thinking model and cannot disable thinking via thinkingBudget.
+      // Headroom must cover several thousand thought tokens *before* the answer.
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 1024,
-        thinkingConfig: { thinkingBudget: 0 },
+        maxOutputTokens: 8192,
       },
     };
     const res = await fetch(

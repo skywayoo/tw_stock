@@ -7,21 +7,6 @@ import { HoldingSnapshot } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
-// Fetch previous close from Yahoo Finance
-async function getPrevClose(stockId: string): Promise<number> {
-  try {
-    const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${stockId}.TW?interval=1d&range=2d`,
-      { cache: 'no-store' }
-    );
-    const data = await res.json() as { chart?: { result?: { indicators?: { quote?: { close?: number[] }[] } }[] } };
-    const closes = data.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
-    return closes[closes.length - 2] ?? 0;
-  } catch {
-    return 0;
-  }
-}
-
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -45,17 +30,20 @@ export async function GET(request: Request) {
   for (const h of holdings) {
     const p = prices[h.stockId];
     if (!p) continue;
-    const prevClose = await getPrevClose(h.stockId);
+    // Use TWSE realtime change (price - yesterday close) directly. Yahoo's range=2d
+    // intermittently returns only today's bar, which made prevClose == today's close
+    // and dayChange collapse to 0.
+    const change = p.change;
+    const prevClose = p.price - change;
     const sharesCount = h.shares * 1000;
     const value = p.price * sharesCount;
     const cost = h.avgCost * sharesCount;
-    const change = p.price - prevClose;
 
     snapshots.push({
       stockId: h.stockId, stockName: h.stockName, shares: h.shares,
       closePrice: p.price, prevClosePrice: prevClose, value,
       change: Math.round(change * 100) / 100,
-      changePct: prevClose > 0 ? Math.round((change / prevClose) * 10000) / 100 : 0,
+      changePct: p.changePct,
     });
     totalValue += value;
     totalCost += cost;

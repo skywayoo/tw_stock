@@ -91,10 +91,14 @@ ${newsText}
       const reason = reasonMatch?.[1]?.trim() ?? '';
       const suggestion = suggestionMatch?.[1]?.trim() ?? '';
 
+      // Gemma 4 sometimes spends the whole token budget on internal thinking and emits no
+      // answer text. Skip pushing an empty card rather than sending a stock name with blanks.
+      if (!trend && !reason && !suggestion) continue;
+
       const emoji = trend.includes('看漲') ? '🟢' : trend.includes('看跌') ? '🔴' : '🟡';
       analyses.push(
-        `${emoji} <b>${holding.stockName}(${holding.stockId})</b> — ${trend}\n` +
-        `${reason}\n<i>建議：${suggestion}</i>`
+        `${emoji} <b>${holding.stockName}(${holding.stockId})</b> — ${trend || '—'}\n` +
+        `${reason}${suggestion ? `\n<i>建議：${suggestion}</i>` : ''}`
       );
     } catch { /* skip */ }
 
