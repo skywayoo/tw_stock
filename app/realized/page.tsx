@@ -15,12 +15,13 @@ function calcSalePnl(r: RealizedPnl): number {
 }
 
 function entryPnl(r: RealizedPnl): number {
-  return r.type === 'lending_return' ? (r.netInterest ?? 0) : calcSalePnl(r);
+  if (r.type === 'lending_return' || r.type === 'fee_rebate') return r.netInterest ?? 0;
+  return calcSalePnl(r);
 }
 
 function entryDate(r: RealizedPnl): string { return r.sellDate; }
 
-type TypeFilter = 'all' | 'sale' | 'lending_return';
+type TypeFilter = 'all' | 'sale' | 'lending_return' | 'fee_rebate';
 
 export default function RealizedPage() {
   const { realizedPnls, isLoading } = useRealizedPnls();
@@ -47,15 +48,17 @@ export default function RealizedPage() {
 
   // Totals respect date filter only (so type filter shows the same numerator/denominator)
   const dateScoped = all.filter(matchesDate);
-  const sales = dateScoped.filter((r) => r.type !== 'lending_return');
+  const sales = dateScoped.filter((r) => r.type === 'sale');
   const returns = dateScoped.filter((r) => r.type === 'lending_return');
+  const rebates = dateScoped.filter((r) => r.type === 'fee_rebate');
 
   const totalSale = sales.reduce((s, r) => s + calcSalePnl(r), 0);
   const totalReturnNet = returns.reduce((s, r) => s + (r.netInterest ?? 0), 0);
   const totalReturnGross = returns.reduce((s, r) => s + (r.grossInterest ?? 0), 0);
   const totalReturnFee = returns.reduce((s, r) => s + (r.brokerFeeAmount ?? 0), 0);
   const totalReturnTax = returns.reduce((s, r) => s + (r.withholdingTax ?? 0), 0);
-  const totalAll = totalSale + totalReturnNet;
+  const totalRebate = rebates.reduce((s, r) => s + (r.netInterest ?? 0), 0);
+  const totalAll = totalSale + totalReturnNet + totalRebate;
 
   const visibleTotal = visible.reduce((s, r) => s + entryPnl(r), 0);
 
@@ -83,7 +86,7 @@ export default function RealizedPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="rounded-lg bg-gray-800 p-3">
               <p className="text-gray-400 mb-0.5">賣出損益</p>
               <p className={`text-lg font-semibold ${totalSale >= 0 ? 'text-red-400' : 'text-green-400'}`}>
@@ -92,11 +95,18 @@ export default function RealizedPage() {
               <p className="text-gray-500 mt-0.5">{sales.length} 筆</p>
             </div>
             <div className="rounded-lg bg-gray-800 p-3">
-              <p className="text-gray-400 mb-0.5">還券淨收入</p>
+              <p className="text-gray-400 mb-0.5">還券收入</p>
               <p className={`text-lg font-semibold ${totalReturnNet >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                 {totalReturnNet >= 0 ? '+' : ''}{fmt(totalReturnNet)}
               </p>
               <p className="text-gray-500 mt-0.5">{returns.length} 筆</p>
+            </div>
+            <div className="rounded-lg bg-gray-800 p-3">
+              <p className="text-gray-400 mb-0.5">手續費折讓</p>
+              <p className={`text-lg font-semibold ${totalRebate >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                {totalRebate >= 0 ? '+' : ''}{fmt(totalRebate)}
+              </p>
+              <p className="text-gray-500 mt-0.5">{rebates.length} 筆</p>
             </div>
           </div>
 
@@ -129,6 +139,7 @@ export default function RealizedPage() {
             { v: 'all', label: '全部', count: dateScoped.length },
             { v: 'sale', label: '賣出', count: sales.length },
             { v: 'lending_return', label: '還券', count: returns.length },
+            { v: 'fee_rebate', label: '折讓', count: rebates.length },
           ].map((opt) => (
             <button
               key={opt.v}
@@ -185,6 +196,26 @@ export default function RealizedPage() {
           <div className="rounded-xl bg-gray-900 p-8 text-center text-gray-500">尚無記錄</div>
         ) : (
           visible.map((r) => {
+            if (r.type === 'fee_rebate') {
+              const net = r.netInterest ?? 0;
+              return (
+                <div key={r.id} className="rounded-xl bg-gray-900 p-4 space-y-1">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-white">
+                        <span className="mr-1.5 inline-block rounded bg-yellow-900/40 px-1.5 py-0.5 align-middle text-[10px] font-medium text-yellow-300">
+                          折讓
+                        </span>
+                        {r.stockName}
+                      </p>
+                      <p className="text-xs text-gray-500">{r.sellDate}</p>
+                    </div>
+                    <p className="font-bold text-red-400">+{fmt(net)}</p>
+                  </div>
+                  {r.notes && <p className="text-xs text-gray-500">{r.notes}</p>}
+                </div>
+              );
+            }
             if (r.type === 'lending_return') {
               const gross = r.grossInterest ?? 0;
               const fee = r.brokerFeeAmount ?? 0;

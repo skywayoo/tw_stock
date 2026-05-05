@@ -335,7 +335,7 @@ export async function getRealizedPnls(): Promise<RealizedPnl[]> {
     const typeStr = getSelect(p, 'Type');
     return {
       id: pid(p),
-      type: (typeStr === 'lending_return' ? 'lending_return' : 'sale') as RealizedPnl['type'],
+      type: (['lending_return', 'fee_rebate'].includes(typeStr) ? typeStr : 'sale') as RealizedPnl['type'],
       stockId: getRich(p, 'StockId'), stockName: getTitle(p),
       shares: getNum(p, 'Shares'), buyPrice: getNum(p, 'BuyPrice'),
       sellPrice: getNum(p, 'SellPrice'), sellDate: getDate(p, 'SellDate'),
