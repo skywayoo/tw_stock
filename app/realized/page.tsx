@@ -15,13 +15,13 @@ function calcSalePnl(r: RealizedPnl): number {
 }
 
 function entryPnl(r: RealizedPnl): number {
-  if (r.type === 'lending_return' || r.type === 'fee_rebate') return r.netInterest ?? 0;
+  if (r.type === 'lending_return' || r.type === 'fee_rebate' || r.type === 'dividend') return r.netInterest ?? 0;
   return calcSalePnl(r);
 }
 
 function entryDate(r: RealizedPnl): string { return r.sellDate; }
 
-type TypeFilter = 'all' | 'sale' | 'lending_return' | 'fee_rebate';
+type TypeFilter = 'all' | 'sale' | 'lending_return' | 'fee_rebate' | 'day_trade' | 'dividend';
 
 export default function RealizedPage() {
   const { realizedPnls, isLoading } = useRealizedPnls();
@@ -49,16 +49,20 @@ export default function RealizedPage() {
   // Totals respect date filter only (so type filter shows the same numerator/denominator)
   const dateScoped = all.filter(matchesDate);
   const sales = dateScoped.filter((r) => r.type === 'sale');
+  const dayTrades = dateScoped.filter((r) => r.type === 'day_trade');
   const returns = dateScoped.filter((r) => r.type === 'lending_return');
   const rebates = dateScoped.filter((r) => r.type === 'fee_rebate');
+  const dividends = dateScoped.filter((r) => r.type === 'dividend');
 
   const totalSale = sales.reduce((s, r) => s + calcSalePnl(r), 0);
+  const totalDayTrade = dayTrades.reduce((s, r) => s + calcSalePnl(r), 0);
   const totalReturnNet = returns.reduce((s, r) => s + (r.netInterest ?? 0), 0);
   const totalReturnGross = returns.reduce((s, r) => s + (r.grossInterest ?? 0), 0);
   const totalReturnFee = returns.reduce((s, r) => s + (r.brokerFeeAmount ?? 0), 0);
   const totalReturnTax = returns.reduce((s, r) => s + (r.withholdingTax ?? 0), 0);
   const totalRebate = rebates.reduce((s, r) => s + (r.netInterest ?? 0), 0);
-  const totalAll = totalSale + totalReturnNet + totalRebate;
+  const totalDividend = dividends.reduce((s, r) => s + (r.netInterest ?? 0), 0);
+  const totalAll = totalSale + totalDayTrade + totalReturnNet + totalRebate + totalDividend;
 
   const visibleTotal = visible.reduce((s, r) => s + entryPnl(r), 0);
 
@@ -93,6 +97,20 @@ export default function RealizedPage() {
                 {totalSale >= 0 ? '+' : ''}{fmt(totalSale)}
               </p>
               <p className="text-gray-500 mt-0.5">{sales.length} 筆</p>
+            </div>
+            <div className="rounded-lg bg-gray-800 p-3">
+              <p className="text-gray-400 mb-0.5">當沖損益</p>
+              <p className={`text-lg font-semibold ${totalDayTrade >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                {totalDayTrade >= 0 ? '+' : ''}{fmt(totalDayTrade)}
+              </p>
+              <p className="text-gray-500 mt-0.5">{dayTrades.length} 筆</p>
+            </div>
+            <div className="rounded-lg bg-gray-800 p-3">
+              <p className="text-gray-400 mb-0.5">股息</p>
+              <p className={`text-lg font-semibold ${totalDividend >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                {totalDividend >= 0 ? '+' : ''}{fmt(totalDividend)}
+              </p>
+              <p className="text-gray-500 mt-0.5">{dividends.length} 筆</p>
             </div>
             <div className="rounded-lg bg-gray-800 p-3">
               <p className="text-gray-400 mb-0.5">還券收入</p>
@@ -138,6 +156,8 @@ export default function RealizedPage() {
           {[
             { v: 'all', label: '全部', count: dateScoped.length },
             { v: 'sale', label: '賣出', count: sales.length },
+            { v: 'day_trade', label: '當沖', count: dayTrades.length },
+            { v: 'dividend', label: '股息', count: dividends.length },
             { v: 'lending_return', label: '還券', count: returns.length },
             { v: 'fee_rebate', label: '折讓', count: rebates.length },
           ].map((opt) => (
@@ -216,6 +236,26 @@ export default function RealizedPage() {
                 </div>
               );
             }
+            if (r.type === 'dividend') {
+              const net = r.netInterest ?? 0;
+              return (
+                <div key={r.id} className="rounded-xl bg-gray-900 p-4 space-y-1">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-white">
+                        <span className="mr-1.5 inline-block rounded bg-purple-900/40 px-1.5 py-0.5 align-middle text-[10px] font-medium text-purple-300">
+                          股息
+                        </span>
+                        {r.stockName} <span className="text-xs text-gray-500">{r.stockId}</span>
+                      </p>
+                      <p className="text-xs text-gray-500">{r.sellDate}</p>
+                    </div>
+                    <p className="font-bold text-red-400">+{fmt(net)}</p>
+                  </div>
+                  {r.notes && <p className="text-xs text-gray-500">{r.notes}</p>}
+                </div>
+              );
+            }
             if (r.type === 'lending_return') {
               const gross = r.grossInterest ?? 0;
               const fee = r.brokerFeeAmount ?? 0;
@@ -254,13 +294,16 @@ export default function RealizedPage() {
             const pnl = calcSalePnl(r);
             const effectiveBuy = r.buyPrice - r.dividendDeducted;
             const pct = effectiveBuy > 0 ? ((r.sellPrice - effectiveBuy) / effectiveBuy) * 100 : 0;
+            const isDayTrade = r.type === 'day_trade';
             return (
               <div key={r.id} className="rounded-xl bg-gray-900 p-4 space-y-2">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="font-semibold text-white">
-                      <span className="mr-1.5 inline-block rounded bg-blue-900/40 px-1.5 py-0.5 align-middle text-[10px] font-medium text-blue-300">
-                        賣出
+                      <span className={`mr-1.5 inline-block rounded px-1.5 py-0.5 align-middle text-[10px] font-medium ${
+                        isDayTrade ? 'bg-orange-900/40 text-orange-300' : 'bg-blue-900/40 text-blue-300'
+                      }`}>
+                        {isDayTrade ? '當沖' : '賣出'}
                       </span>
                       {r.stockName} <span className="text-xs text-gray-500">{r.stockId}</span>
                     </p>
