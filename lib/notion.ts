@@ -17,10 +17,18 @@ const HEADERS = () => ({
 });
 
 async function queryDB(dbId: string, body: Record<string, unknown> = {}): Promise<{ results: Record<string, unknown>[] }> {
-  const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
-    method: 'POST', headers: HEADERS(), body: JSON.stringify(body),
-  });
-  return res.json();
+  const all: Record<string, unknown>[] = [];
+  let cursor: string | undefined;
+  do {
+    const reqBody = { ...body, ...(cursor ? { start_cursor: cursor } : {}) };
+    const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+      method: 'POST', headers: HEADERS(), body: JSON.stringify(reqBody),
+    });
+    const data = await res.json() as { results?: Record<string, unknown>[]; has_more?: boolean; next_cursor?: string };
+    if (data.results) all.push(...data.results);
+    cursor = data.has_more ? data.next_cursor : undefined;
+  } while (cursor);
+  return { results: all };
 }
 
 async function createPage(dbId: string, properties: Record<string, unknown>): Promise<string> {
