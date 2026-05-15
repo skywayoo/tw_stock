@@ -195,7 +195,7 @@ function SortableHoldingCard(props: HoldingCardProps) {
             {exDivs.length === 0 ? (
               <p className="text-sm text-gray-600">無除息記錄</p>
             ) : exDivs.map((e) => {
-              const sharesMatch = e.source?.match(/持股[~約≈]?\s*([\d,]+)\s*股/);
+              const sharesMatch = e.source?.match(/持股\s*[~約≈]?\s*([\d,]+(?:-[\d,]+)?)\s*股/);
               const estShares = sharesMatch ? sharesMatch[1] : null;
               return (
                 <div key={e.id} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0">
