@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { memGet, memSet } from '@/lib/server-cache';
+import { getSBLPrevSnapshot, saveSBLPrevSnapshot } from '@/lib/notion';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,12 +50,24 @@ export async function GET(req: NextRequest) {
   let current = memGet<Record<string, StockSBL>>(KEY_CURRENT);
 
   if (!current) {
-    const prev = memGet<Record<string, StockSBL>>(KEY_PREV);
+    const prevInMem = memGet<Record<string, StockSBL>>(KEY_PREV);
+
+    // Restore prev from Notion on cold start (when memory is empty)
+    if (!prevInMem) {
+      const notionPrev = await getSBLPrevSnapshot();
+      if (notionPrev) memSet(KEY_PREV, notionPrev as Record<string, StockSBL>, TTL_PREV);
+    }
+
     try {
       current = await fetchAllSBL();
     } catch {
       return NextResponse.json(Object.fromEntries(ids.map((id) => [id, { value: null, delta: null, ratio: null, ratioDelta: null } as SBLData])));
     }
+
+    // Persist new current to Notion so next cold start can use it as prev
+    saveSBLPrevSnapshot(current).catch(() => {});
+
+    const prev = memGet<Record<string, StockSBL>>(KEY_PREV);
     if (prev) memSet(KEY_PREV, prev, TTL_PREV);
     else      memSet(KEY_PREV, current, TTL_PREV);
     memSet(KEY_CURRENT, current, TTL_CURRENT);

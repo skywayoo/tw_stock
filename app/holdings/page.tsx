@@ -35,7 +35,7 @@ function saveOrder(ids: string[]) {
 interface HoldingCardProps {
   h: { id: string; stockId: string; stockName: string; shares: number; avgCost: number };
   p?: { price: number; change: number; changePct: number; limitUp: boolean; limitDown: boolean };
-  exDivs: { id: string; exDate: string; cashDividend: number; deductFromCost: boolean }[];
+  exDivs: { id: string; exDate: string; cashDividend: number; stockDividend?: number; deductFromCost: boolean; source?: string }[];
   activeLendings: { id: string; sharesLent: number; annualRate: number; brokerFee: number; accruedInterest: number }[];
   sblInfo: SBLData;
   isOpen: boolean;
@@ -194,18 +194,28 @@ function SortableHoldingCard(props: HoldingCardProps) {
             <p className="text-sm font-semibold text-gray-300 mb-2">除息記錄</p>
             {exDivs.length === 0 ? (
               <p className="text-sm text-gray-600">無除息記錄</p>
-            ) : exDivs.map((e) => (
-              <div key={e.id} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0">
-                <div>
-                  <p className="text-sm text-white">{e.exDate}</p>
-                  <p className="text-xs text-gray-400">現金股利 {e.cashDividend} 元/股</p>
+            ) : exDivs.map((e) => {
+              const sharesMatch = e.source?.match(/持股[~約≈]?\s*([\d,]+)\s*股/);
+              const estShares = sharesMatch ? sharesMatch[1] : null;
+              return (
+                <div key={e.id} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0">
+                  <div>
+                    <p className="text-sm text-white">{e.exDate}</p>
+                    <p className="text-xs text-gray-400">
+                      現金股利 {e.cashDividend} 元/股
+                      {e.stockDividend ? <span className="text-yellow-400 ml-1">· 股票股利 {e.stockDividend} 元/股（+{(e.stockDividend * 10).toFixed(0)}% 股）</span> : null}
+                    </p>
+                    {estShares && (
+                      <p className="text-[10px] text-gray-500 mt-0.5">當時持股 ≈ {estShares} 股</p>
+                    )}
+                  </div>
+                  <button onClick={() => onToggleDeduct(e.id, e.deductFromCost)}
+                    className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${e.deductFromCost ? 'bg-emerald-800 text-emerald-300' : 'bg-gray-700 text-gray-300'}`}>
+                    {e.deductFromCost ? '已扣成本' : '扣成本'}
+                  </button>
                 </div>
-                <button onClick={() => onToggleDeduct(e.id, e.deductFromCost)}
-                  className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${e.deductFromCost ? 'bg-emerald-800 text-emerald-300' : 'bg-gray-700 text-gray-300'}`}>
-                  {e.deductFromCost ? '已扣成本' : '扣成本'}
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Lending */}
