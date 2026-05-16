@@ -93,7 +93,7 @@ export interface HoldingSnapshot {
 }
 
 // ============ Realized P&L ============
-export type RealizedType = 'sale' | 'lending_return' | 'fee_rebate' | 'day_trade' | 'dividend';
+export type RealizedType = 'sale' | 'lending_return' | 'fee_rebate' | 'day_trade' | 'dividend' | 'futures';
 
 export interface RealizedPnl {
   id: string;
