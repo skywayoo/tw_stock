@@ -28,6 +28,7 @@ export default function RealizedPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [stockFilter, setStockFilter] = useState('');
 
   const all = realizedPnls;
 
@@ -41,9 +42,20 @@ export default function RealizedPage() {
   const matchesType = (r: RealizedPnl) =>
     typeFilter === 'all' || r.type === typeFilter;
 
+  const matchesStock = (r: RealizedPnl) => {
+    if (!stockFilter.trim()) return true;
+    const q = stockFilter.trim().toLowerCase();
+    return (r.stockId || '').toLowerCase().includes(q) ||
+           (r.stockName || '').toLowerCase().includes(q);
+  };
+
+  // Distinct stock codes from current data (for autocomplete)
+  const stockOptions = Array.from(new Set(all.map((r) => r.stockId).filter(Boolean))).sort();
+
   const visible = all
     .filter(matchesDate)
     .filter(matchesType)
+    .filter(matchesStock)
     .sort((a, b) => entryDate(b).localeCompare(entryDate(a)));
 
   // Totals respect date filter only (so type filter shows the same numerator/denominator)
@@ -200,8 +212,31 @@ export default function RealizedPage() {
           )}
         </div>
 
+        {/* Stock code filter */}
+        <div className="flex items-center gap-2">
+          <input
+            list="stock-options"
+            type="text"
+            value={stockFilter}
+            onChange={(e) => setStockFilter(e.target.value)}
+            placeholder="股票代號或名稱（如 3257 / 虹冠 / 00878）"
+            className="flex-1 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-white focus:border-blue-500 focus:outline-none"
+          />
+          <datalist id="stock-options">
+            {stockOptions.map((s) => <option key={s} value={s} />)}
+          </datalist>
+          {stockFilter && (
+            <button
+              onClick={() => setStockFilter('')}
+              className="shrink-0 rounded-lg bg-gray-800 px-2 py-2 text-xs text-gray-400 hover:bg-gray-700"
+            >
+              清除
+            </button>
+          )}
+        </div>
+
         {/* Filtered total when narrowed */}
-        {(typeFilter !== 'all' || startDate || endDate) && (
+        {(typeFilter !== 'all' || startDate || endDate || stockFilter) && (
           <div className="text-right text-xs text-gray-400">
             篩選小計（{visible.length} 筆）：
             <span className={`ml-1 font-semibold ${visibleTotal >= 0 ? 'text-red-400' : 'text-green-400'}`}>
