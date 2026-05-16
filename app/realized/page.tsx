@@ -140,6 +140,13 @@ export default function RealizedPage() {
               </p>
               <p className="text-gray-500 mt-0.5">{rebates.length} 筆</p>
             </div>
+            <div className="rounded-lg bg-gray-800 p-3">
+              <p className="text-gray-400 mb-0.5">期貨</p>
+              <p className={`text-lg font-semibold ${totalFutures >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                {totalFutures >= 0 ? '+' : ''}{fmt(totalFutures)}
+              </p>
+              <p className="text-gray-500 mt-0.5">{futures.length} 筆</p>
+            </div>
           </div>
 
           {/* When focused on lending_return, show breakdown */}
