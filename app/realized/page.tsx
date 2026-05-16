@@ -15,13 +15,13 @@ function calcSalePnl(r: RealizedPnl): number {
 }
 
 function entryPnl(r: RealizedPnl): number {
-  if (r.type === 'lending_return' || r.type === 'fee_rebate' || r.type === 'dividend') return r.netInterest ?? 0;
+  if (r.type === 'lending_return' || r.type === 'fee_rebate' || r.type === 'dividend' || r.type === 'futures') return r.netInterest ?? 0;
   return calcSalePnl(r);
 }
 
 function entryDate(r: RealizedPnl): string { return r.sellDate; }
 
-type TypeFilter = 'all' | 'sale' | 'lending_return' | 'fee_rebate' | 'day_trade' | 'dividend';
+type TypeFilter = 'all' | 'sale' | 'lending_return' | 'fee_rebate' | 'day_trade' | 'dividend' | 'futures';
 
 export default function RealizedPage() {
   const { realizedPnls, isLoading } = useRealizedPnls();
@@ -65,6 +65,7 @@ export default function RealizedPage() {
   const returns = dateScoped.filter((r) => r.type === 'lending_return');
   const rebates = dateScoped.filter((r) => r.type === 'fee_rebate');
   const dividends = dateScoped.filter((r) => r.type === 'dividend');
+  const futures = dateScoped.filter((r) => r.type === 'futures');
 
   const totalSale = sales.reduce((s, r) => s + calcSalePnl(r), 0);
   const totalDayTrade = dayTrades.reduce((s, r) => s + calcSalePnl(r), 0);
@@ -74,7 +75,8 @@ export default function RealizedPage() {
   const totalReturnTax = returns.reduce((s, r) => s + (r.withholdingTax ?? 0), 0);
   const totalRebate = rebates.reduce((s, r) => s + (r.netInterest ?? 0), 0);
   const totalDividend = dividends.reduce((s, r) => s + (r.netInterest ?? 0), 0);
-  const totalAll = totalSale + totalDayTrade + totalReturnNet + totalRebate + totalDividend;
+  const totalFutures = futures.reduce((s, r) => s + (r.netInterest ?? 0), 0);
+  const totalAll = totalSale + totalDayTrade + totalReturnNet + totalRebate + totalDividend + totalFutures;
 
   const visibleTotal = visible.reduce((s, r) => s + entryPnl(r), 0);
 
@@ -172,6 +174,7 @@ export default function RealizedPage() {
             { v: 'dividend', label: '股息', count: dividends.length },
             { v: 'lending_return', label: '還券', count: returns.length },
             { v: 'fee_rebate', label: '折讓', count: rebates.length },
+            { v: 'futures', label: '期貨', count: futures.length },
           ].map((opt) => (
             <button
               key={opt.v}
@@ -286,6 +289,26 @@ export default function RealizedPage() {
                       <p className="text-xs text-gray-500">{r.sellDate}</p>
                     </div>
                     <p className="font-bold text-red-400">+{fmt(net)}</p>
+                  </div>
+                  {r.notes && <p className="text-xs text-gray-500">{r.notes}</p>}
+                </div>
+              );
+            }
+            if (r.type === 'futures') {
+              const net = r.netInterest ?? 0;
+              return (
+                <div key={r.id} className="rounded-xl bg-gray-900 p-4 space-y-1">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-white">
+                        <span className="mr-1.5 inline-block rounded bg-cyan-900/40 px-1.5 py-0.5 align-middle text-[10px] font-medium text-cyan-300">
+                          期貨
+                        </span>
+                        {r.stockName} <span className="text-xs text-gray-500">{r.stockId}</span>
+                      </p>
+                      <p className="text-xs text-gray-500">{r.sellDate}</p>
+                    </div>
+                    <p className={`font-bold ${net >= 0 ? 'text-red-400' : 'text-green-400'}`}>{net >= 0 ? '+' : ''}{fmt(net)}</p>
                   </div>
                   {r.notes && <p className="text-xs text-gray-500">{r.notes}</p>}
                 </div>
