@@ -5,9 +5,8 @@ import { sendTelegram } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
-async function fetchGoogleNewsRss(stockId: string, stockName: string): Promise<{ title: string; url: string }[]> {
-  const query = encodeURIComponent(`${stockName} ${stockId}`);
-  const url = `https://news.google.com/rss/search?q=${query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
+async function fetchGoogleNewsByQuery(query: string, limit = 5): Promise<{ title: string; url: string }[]> {
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
   const res = await fetch(url, {
     cache: 'no-store',
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)' },
@@ -20,10 +19,22 @@ async function fetchGoogleNewsRss(stockId: string, stockName: string): Promise<{
     const title = m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim();
     const link = m[2].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim();
     if (title && link) items.push({ title, url: link });
-    if (items.length >= 5) break;
+    if (items.length >= limit) break;
   }
   return items;
 }
+
+async function fetchGoogleNewsRss(stockId: string, stockName: string): Promise<{ title: string; url: string }[]> {
+  return fetchGoogleNewsByQuery(`${stockName} ${stockId}`);
+}
+
+// Extra keyword combos to watch per stock — hits via these are auto-flagged 重要 regardless of Gemini judgement.
+// Lets us catch "hidden catalyst" stories that the generic stockName+stockId query may miss
+// (e.g. 強茂 + FOPLP cross-mentions usually feature 群創 as the headline subject).
+const KEYWORD_WATCHES: Record<string, string[]> = {
+  '2481': ['FOPLP', '群創 FOPLP', '亞智 FOPLP', '功率元件 漲價', '安世 轉單', '揚傑 制裁'],
+  '3257': ['Switch 2', 'RTX 50', 'AI 伺服器 PMIC', 'PMIC 漲價', '虹冠 5月營收'],
+};
 
 function stripMarkdown(s: string): string {
   return s.replace(/\*+/g, '').replace(/^#+\s*/gm, '').replace(/`+/g, '').trim();
@@ -47,7 +58,23 @@ export async function GET(request: Request) {
   const debug: string[] = [];
 
   for (const holding of holdings) {
-    const articles = await fetchGoogleNewsRss(holding.stockId, holding.stockName);
+    const baseArticles = await fetchGoogleNewsRss(holding.stockId, holding.stockName);
+
+    // Extra keyword-watch queries — these articles get auto-flagged 重要 if fresh.
+    const watchKeywords = KEYWORD_WATCHES[holding.stockId] ?? [];
+    const watchTitles = new Set<string>();
+    const watchArticles: { title: string; url: string }[] = [];
+    for (const kw of watchKeywords) {
+      const arts = await fetchGoogleNewsByQuery(`${holding.stockName} ${kw}`, 3);
+      for (const a of arts) {
+        if (!watchTitles.has(a.title) && !baseArticles.some((b) => b.title === a.title)) {
+          watchTitles.add(a.title);
+          watchArticles.push(a);
+        }
+      }
+    }
+    const articles = [...baseArticles, ...watchArticles];
+
     if (articles.length === 0) {
       debug.push(`${holding.stockId}: 0 articles`);
       continue;
@@ -58,7 +85,7 @@ export async function GET(request: Request) {
     const seenTitles = new Set(existing.map((e) => e.title));
     const fresh = articles.filter((a) => !seenTitles.has(a.title));
     skipped += articles.length - fresh.length;
-    debug.push(`${holding.stockId}: ${articles.length} articles, ${fresh.length} fresh`);
+    debug.push(`${holding.stockId}: ${articles.length} (${baseArticles.length}+${watchArticles.length} kw) articles, ${fresh.length} fresh`);
     if (fresh.length === 0) continue;
 
     const headlines = fresh.map((a) => `- ${a.title}`).join('\n');
@@ -92,6 +119,12 @@ ${headlines}
       const sentiment = sentimentRaw.includes('利多') ? 'bullish'
         : sentimentRaw.includes('利空') ? 'bearish' : 'neutral';
 
+      // Auto-flag as important if any fresh article hit a watched keyword combo.
+      const matchedKw = watchKeywords.find((kw) =>
+        fresh.some((a) => a.title.includes(kw) || watchTitles.has(a.title))
+      );
+      const finalImportant = isImportant || !!matchedKw;
+
       await createNews({
         stockId: holding.stockId,
         stockName: holding.stockName,
@@ -103,12 +136,13 @@ ${headlines}
         originalUrl: fresh[0].url,
       });
 
-      if (isImportant) {
+      if (finalImportant) {
         const emoji = sentiment === 'bullish' ? '🟢' : sentiment === 'bearish' ? '🔴' : '⚪';
+        const kwTag = matchedKw ? `\n🔖 關鍵字觸發：${matchedKw}` : '';
         importantNews.push(
           `${emoji} <b>${holding.stockName}(${holding.stockId})</b>\n` +
           `📰 ${fresh[0].title}\n` +
-          `💭 ${summary}`
+          `💭 ${summary}${kwTag}`
         );
       }
 
