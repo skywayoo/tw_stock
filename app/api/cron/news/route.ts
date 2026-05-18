@@ -6,7 +6,9 @@ import { sendTelegram } from '@/lib/telegram';
 export const dynamic = 'force-dynamic';
 
 async function fetchGoogleNewsByQuery(query: string, limit = 5): Promise<{ title: string; url: string }[]> {
-  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
+  // when=1d limits to past 24h; Google News still returns older items for some queries,
+  // so we also parse <pubDate> below and filter on the client.
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}+when:1d&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
   const res = await fetch(url, {
     cache: 'no-store',
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)' },
@@ -14,10 +16,20 @@ async function fetchGoogleNewsByQuery(query: string, limit = 5): Promise<{ title
   if (!res.ok) return [];
   const text = await res.text();
   const items: { title: string; url: string }[] = [];
-  const matches = text.matchAll(/<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<\/item>/g);
+  const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
+  const matches = text.matchAll(/<item>([\s\S]*?)<\/item>/g);
   for (const m of matches) {
-    const title = m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim();
-    const link = m[2].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim();
+    const block = m[1];
+    const titleM = block.match(/<title>([\s\S]*?)<\/title>/);
+    const linkM = block.match(/<link>([\s\S]*?)<\/link>/);
+    const pubM = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+    if (!titleM || !linkM) continue;
+    const title = titleM[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim();
+    const link = linkM[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim();
+    if (pubM) {
+      const ts = Date.parse(pubM[1].trim());
+      if (!isNaN(ts) && ts < cutoffMs) continue;
+    }
     if (title && link) items.push({ title, url: link });
     if (items.length >= limit) break;
   }
