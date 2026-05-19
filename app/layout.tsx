@@ -15,9 +15,21 @@ export const viewport: Viewport = {
   userScalable: false, viewportFit: 'cover', themeColor: '#0f172a',
 };
 
+const themeInitScript = `
+(function(){
+  try {
+    var t = localStorage.getItem('theme') || 'dark';
+    if (t === 'dark') document.documentElement.classList.add('dark');
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-TW" className="h-full">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="bg-gray-950 font-sans text-white antialiased">
         <main className="mx-auto max-w-lg pb-24">{children}</main>
         <BottomNav />
