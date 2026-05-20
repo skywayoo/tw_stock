@@ -5,9 +5,28 @@ import { sendTelegram } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
+// Publishers explicitly blacklisted per user request 2026-05-21:
+// MoneyDJ 理財網 + CMoney 股市爆料同學會 are noisy/low-quality for trading signal.
+const BLOCKED_PUBLISHERS = ['MoneyDJ', 'moneydj', '理財網', 'CMoney', 'cmoney', '股市爆料同學會', '爆料同學會'];
+
+function isBlockedPublisher(title: string, url: string): boolean {
+  const haystack = `${title} ${url}`.toLowerCase();
+  return BLOCKED_PUBLISHERS.some((p) => haystack.includes(p.toLowerCase()));
+}
+
+function isSameDayTaiwan(pubDateStr: string): boolean {
+  // Today in Taipei (UTC+8). Article qualifies if its pubDate is the same calendar day.
+  const pubTs = Date.parse(pubDateStr);
+  if (isNaN(pubTs)) return false;
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const today = fmt.format(new Date());
+  const pubDay = fmt.format(new Date(pubTs));
+  return pubDay === today;
+}
+
 async function fetchGoogleNewsByQuery(query: string, limit = 5): Promise<{ title: string; url: string }[]> {
-  // when=1d limits to past 24h; Google News still returns older items for some queries,
-  // so we also parse <pubDate> below and filter on the client.
+  // when=1d limits to past 24h; we additionally enforce "today only" (Taipei TZ) below,
+  // and drop blocked publishers (MoneyDJ / CMoney) per user rule.
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}+when:1d&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
   const res = await fetch(url, {
     cache: 'no-store',
@@ -16,7 +35,6 @@ async function fetchGoogleNewsByQuery(query: string, limit = 5): Promise<{ title
   if (!res.ok) return [];
   const text = await res.text();
   const items: { title: string; url: string }[] = [];
-  const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
   const matches = text.matchAll(/<item>([\s\S]*?)<\/item>/g);
   for (const m of matches) {
     const block = m[1];
@@ -26,10 +44,8 @@ async function fetchGoogleNewsByQuery(query: string, limit = 5): Promise<{ title
     if (!titleM || !linkM) continue;
     const title = titleM[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim();
     const link = linkM[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1').trim();
-    if (pubM) {
-      const ts = Date.parse(pubM[1].trim());
-      if (!isNaN(ts) && ts < cutoffMs) continue;
-    }
+    if (!pubM || !isSameDayTaiwan(pubM[1].trim())) continue;
+    if (isBlockedPublisher(title, link)) continue;
     if (title && link) items.push({ title, url: link });
     if (items.length >= limit) break;
   }
@@ -109,21 +125,30 @@ ${headlines}
 1. 用 30-50 字繁體中文，明確總結這批新聞重點（要寫完整句子，不要只寫一兩個詞）
 2. 整體判斷：利多／利空／中性
 3. 是否屬於需要立即通知的重大事件（除息除權、財報、重大訂單、訴訟、收購、火警、停產、關鍵高層異動、漲跌停 ⋯⋯）
+4. 內文時效：判斷此批新聞是否在報導「最近 24 小時內發生」的事件。若標題暗示是過去事件回顧（例：「3 月時公司...」「去年宣布的...」「歷年回顧」），標記為「舊聞」。
 
 純文字格式（每欄都必填，不要加 markdown 符號）：
 摘要：[30-50 字完整句子]
 判斷：[利多/利空/中性]
-重要：[是/否]`;
+重要：[是/否]
+時效：[新/舊聞]`;
 
     try {
       const reply = await callGemini(apiKey, prompt);
       const summaryMatch = reply.match(/摘要：(.+)/);
       const sentimentMatch = reply.match(/判斷：(.+)/);
       const importantMatch = reply.match(/重要：(.+)/);
+      const recencyMatch = reply.match(/時效：(.+)/);
 
       let summary = stripMarkdown(summaryMatch?.[1]?.trim() ?? '');
       const sentimentRaw = sentimentMatch?.[1]?.trim() ?? '中性';
       const isImportant = importantMatch?.[1]?.includes('是') ?? false;
+      const isOldRecap = recencyMatch?.[1]?.includes('舊聞') ?? false;
+
+      if (isOldRecap) {
+        debug.push(`${holding.stockId}: skipped — Gemini classified as 舊聞`);
+        continue;
+      }
 
       // Fallback: too short / empty → use top headline as summary
       if (summary.length < 8) summary = fresh[0].title;
@@ -154,7 +179,8 @@ ${headlines}
         importantNews.push(
           `${emoji} <b>${holding.stockName}(${holding.stockId})</b>\n` +
           `📰 ${fresh[0].title}\n` +
-          `💭 ${summary}${kwTag}`
+          `💭 ${summary}${kwTag}\n` +
+          `🔗 ${fresh[0].url}`
         );
       }
 
