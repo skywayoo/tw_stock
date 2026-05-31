@@ -2,7 +2,7 @@ name: Cron - 新聞監測
 
 on:
   schedule:
-    - cron: '*/10 * * * 1-5'  # 每10分鐘，週一到五
+    - cron: '0 * * * 1-5'  # 每小時整點，週一到五
   workflow_dispatch:
 
 jobs:
